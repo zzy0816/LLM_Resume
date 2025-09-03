@@ -51,13 +51,16 @@ LLM_Resume_Project/
 ├── .env
 ├── requirements.txt
 ├── main.py                 # 使用LLM查询简历的所有分类
+├── frontend.py             # streamlit 了一个简单的前端
 ├── minio_data/             # 本地 MinIO 数据挂载目录
 ├── data/                   # 本地测试简历文件存放目录
+├── downloads/              # 储存从MINIO下载到本地的文件
 │   ├── Resume(AI).docx
 │   └── Resume(DS)v0.1.docx
 └── scripts/                # 可选辅助脚本目录
     ├── upload_langchain_nollm.py # 不使用LLM,只用sentence_transform模型分段
     ├── upload_llm.py # 使用LLM分类,单独查询一个分类
+    ├── upload_llm_v0.py # upload_llm.py 的初始版,保留防止意外
     └── storage_client.py     # 上传和下载简历（可用 boto3）
 
 ---
@@ -121,7 +124,7 @@ MINIO_BUCKET=resume-bucket
 ---
 
 ## 示例运行
-main.py
+main.py 或 strealit run frontend.py
 
 """"""""""""""""""""""""""""""""
 ====== 简历自动分类分析报告 ======
@@ -235,12 +238,19 @@ main.py
 .env 管理密钥信息，不要硬编码在脚本中
 
 ## 更新目标
-1. 目前的简历分析抓取中设置了分类, 未来也许可以考虑完全去除手动设置,全自动分析(可选)
-2. FASTAPI:用户可以在前端(PostMan)选择文件,查看文件分析结果,适当追问,等等
+1. 目前的简历分析抓取中设置了分类, 未来也许可以考虑完全去除手动设置,全自动分析(已实现)
+2. FASTAPI:用户可以在前端(PostMan)选择文件,查看文件分析结果,适当追问,等等 (已实现)
+3. 继续优化LLM的分析能力
 
 ## 每周更新
+
+# week 1: 
 1. 项目创建: 虚拟环境, 项目基本架构(数据,脚本,环境文件,requirement,readme...)GitHub上传
 2. 因为AWS无法创建免费账号,使用用为S3和boto的MINIO代替
 3. storage_client.py 管理文件上传(可以并发)和下载(到本地) 到MINIOserver
 4. upload_langchain_nollm.py 仅用docx格式如换行,句号等分类, 想输出所有相关内容,会分段过大,想分段合适会无法精确输出
 5. upload_llm.py 使用LLM为分好的段落分类,同时添加目标类别过滤,大多数情况可以精确分类(模型能力有限,不是每次运行都是完美,偶尔在分类中会出现不是特别相关的段落), 同时可以利用向量库进行追问回答
+
+# week 2
+1. 添加FASTAPI, 可以通过postman进行简历分析 和 追问
+2. 用streamlit做了一个简单的前端,用户可以通过前端上传本地文件到MINIO,以及提供分析和追问功能

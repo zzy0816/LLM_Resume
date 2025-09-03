@@ -1,11 +1,16 @@
+import os
 import logging
+from fastapi import FastAPI
+from pydantic import BaseModel
+
 from scripts.upload_llm import (
     read_docx_paragraphs,
     classify_paragraphs,
-    build_faiss_with_category,  
-    summarize_full_category,     
-    query_dynamic_category,       # 确保导入
+    build_faiss_with_category,
+    summarize_full_category,
+    query_dynamic_category,
 )
+from scripts.storage_client import StorageClient
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,35 +18,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-if __name__ == "__main__":
-    resume_path = r"D:\project\LLM_Resume\data\Resume(AI).docx"
+app = FastAPI(title="Resume Analysis API")
 
-    # 1) 读取 + 分类
-    paragraphs = read_docx_paragraphs(resume_path)
+# 全局变量（可复用向量库）
+faiss_db = None
+classified = None
+
+
+# 请求体定义
+class ResumeRequest(BaseModel):
+    file_name: str
+
+
+class QueryRequest(BaseModel):
+    query: str
+
+
+@app.post("/analyze_resume")
+def analyze_resume(req: ResumeRequest):
+    """
+    输入简历文件名（存储在 MinIO），下载并分析
+    """
+    global faiss_db, classified
+
+    client = StorageClient()
+    downloads_dir = r"D:\project\LLM_Resume\downloads"
+    os.makedirs(downloads_dir, exist_ok=True)
+    local_resume_path = os.path.join(downloads_dir, req.file_name)
+
+    # 下载简历
+    client.read_file(req.file_name, local_resume_path)
+
+    # 读取 + 分类
+    paragraphs = read_docx_paragraphs(local_resume_path)
     classified = classify_paragraphs(paragraphs)
 
-    # 2) 构建向量库
+    # 构建向量库
     faiss_db = build_faiss_with_category(classified)
 
-    # 3) 全类别安全总结
+    # 总结
     categories = ["WorkExperience", "Project", "Education", "Skills", "Other"]
-
-    print("\n====== 简历自动分类分析报告 ======\n")
+    report = {}
     for cat in categories:
-        print(f"\n=== {cat} ===")
-        result = summarize_full_category(classified, cat)
-        print(result)
+        report[cat] = summarize_full_category(classified, cat)
 
-    # 4) 控制台动态问答
-    print("\n====== 向量库问答（输入 q 退出） ======\n")
-    while True:
-        user_query = input("请输入查询内容: ").strip()
-        if user_query.lower() in ["q", "quit", "exit"]:
-            print("退出问答。")
-            break
-        if not user_query:
-            continue
+    return {"message": "简历分析完成", "report": report}
 
-        # 可选类别过滤：True 表示按 query 自动识别类别
-        result_text = query_dynamic_category(faiss_db, user_query, top_k=5, use_category_filter=True)
-        print("\n" + result_text + "\n")
+
+@app.post("/query_resume")
+def query_resume(req: QueryRequest):
+    """
+    根据用户问题查询向量库
+    """
+    global faiss_db
+    if faiss_db is None:
+        return {"error": "请先调用 /analyze_resume 分析简历"}
+
+    result_text = query_dynamic_category(
+        faiss_db, req.query, top_k=5, use_category_filter=True
+    )
+    return {"query": req.query, "answer": result_text}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+         "main:app",      
+        host="0.0.0.0",   
+        port=8000,
+        reload=True       
+    )
