@@ -1,4 +1,5 @@
 import json
+import os
 import logging
 from dotenv import load_dotenv
 from docx import Document as DocxDocument
@@ -6,6 +7,7 @@ from langchain.schema import Document as LC_Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import ollama
+from sentence_transformers import SentenceTransformer, util
 
 load_dotenv()
 
@@ -16,16 +18,76 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MAX_CHUNK_SIZE = 400
-LLM_MODEL_NAME = "llama3.1:8b"
+LLM_MODEL_NAME = "llama3.2:3b"
 
-# 读取 .docx 文件中的所有段落，并返回一个段落列表
+CLASSIFIED_DIR = "./data/classified"
+FAISS_DIR = "./data/faiss"
+os.makedirs(CLASSIFIED_DIR, exist_ok=True)
+os.makedirs(FAISS_DIR, exist_ok=True)
+
+# -------------------------
+# 分类保存 & 加载
+# -------------------------
+def save_classification(file_name: str, classified: dict):
+    path = os.path.join(CLASSIFIED_DIR, f"{file_name}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(classified, f, ensure_ascii=False, indent=2)
+    logger.info("Saved classification to %s", path)
+
+def load_classification(file_name: str) -> dict | None:
+    path = os.path.join(CLASSIFIED_DIR, f"{file_name}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+# -------------------------
+# FAISS 保存 & 加载
+# -------------------------
+def save_faiss(file_name: str, db: FAISS):
+    save_path = os.path.join(FAISS_DIR, file_name)
+    os.makedirs(save_path, exist_ok=True)
+    db.save_local(save_path)
+    logger.info("Saved FAISS db to %s", save_path)
+
+def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
+    save_path = os.path.join(FAISS_DIR, file_name)
+    if os.path.exists(save_path):
+        if embeddings_model is None:
+            embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        return FAISS.load_local(save_path, embeddings_model, allow_dangerous_deserialization=True)
+    return None
+
+# -------------------------
+# 文档处理
+# -------------------------
 def read_docx_paragraphs(docx_path: str):
     doc = DocxDocument(docx_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     logger.info("Document split into %d paragraphs", len(paragraphs))
     return paragraphs
+# 全局加载语义模型（避免重复初始化）
+semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+def semantic_fallback(para_clean: str) -> str:
+    """基于语义相似度的回退分类"""
+    categories = {
+        "WorkExperience": "工作经历，如实习、任职、团队领导、负责项目",
+        "Project": "项目经历，如开发、实现、搭建、研究",
+        "Education": "教育经历，如学位、本科、硕士、大学",
+        "Skills": "技能，如Python、SQL、TensorFlow、PyTorch、机器学习",
+        "Other": "其他内容"
+    }
+    para_emb = semantic_model.encode(para_clean, convert_to_tensor=True)
+    cat_embs = {cat: semantic_model.encode(desc, convert_to_tensor=True) for cat, desc in categories.items()}
+    sims = {cat: float(util.cos_sim(para_emb, emb)) for cat, emb in cat_embs.items()}
+    best_cat, best_score = max(sims.items(), key=lambda x: x[1])
+    if best_score > 0.35:  # 阈值可调
+        return best_cat
+    return "Other"
 
 # 调用 LLM（Ollama）+ 关键词回退，给每个段落打上分类标签
+
 def classify_paragraphs(paragraphs: list):
     classified = {"WorkExperience": [], "Project": [], "Education": [], "Skills": [], "Other": []}
 
@@ -51,6 +113,7 @@ def classify_paragraphs(paragraphs: list):
         category = "Other"
 
         try:
+            # Step 1: 调用 LLM 分类
             response = ollama.chat(
                 model=LLM_MODEL_NAME,
                 messages=[
@@ -65,15 +128,21 @@ def classify_paragraphs(paragraphs: list):
                 if category not in classified:
                     category = "Other"
             except json.JSONDecodeError:
-                # 关键词回退
+                # Step 2: 关键词回退（计数制）
                 para_lower = para_clean.lower()
-                for cat, keywords in category_keywords.items():
-                    if any(k in para_lower for k in keywords):
-                        category = cat
-                        break
-                logger.warning("JSON解析失败，将段落归类为 %s: %s", category, para_clean[:50])
+                scores = {cat: sum(k in para_lower for k in keywords) for cat, keywords in category_keywords.items()}
+                best_cat = max(scores, key=scores.get)
+                if scores[best_cat] > 0:
+                    category = best_cat
+                    logger.warning("关键词回退 -> %s: %s", category, para_clean[:50])
+                else:
+                    # Step 3: 语义相似度回退
+                    category = semantic_fallback(para_clean)
+                    logger.warning("语义回退 -> %s: %s", category, para_clean[:50])
+
         except Exception as e:
             logger.error("分类段落时出错: %s", str(e))
+            category = semantic_fallback(para_clean)
 
         classified[category].append((idx, para_clean))
 
@@ -179,14 +248,26 @@ def summarize_full_category(classified_paragraphs, category: str):
         result += f"{i}. {para}\n\n"
     return result
 
+# -------------------------
+# 主流程示例
+# -------------------------
 if __name__ == "__main__":
-    test_file = r"D:\project\LLM_Resume\downloads\Resume(AI).docx"
-    paragraphs = read_docx_paragraphs(test_file)
-    classified = classify_paragraphs(paragraphs)
+    file_name = "Resume(AI).docx"
+    file_path = f"./downloads/{file_name}"
 
-    # 使用全部段落生成 FAISS 数据库
-    faiss_paras = [para for cat in classified.values() for idx, para in cat]
-    db = build_faiss_with_category(classified)
+    # 尝试加载已有分类结果
+    classified = load_classification(file_name)
+    if classified is None:
+        paragraphs = read_docx_paragraphs(file_path)
+        classified = classify_paragraphs(paragraphs)
+        save_classification(file_name, classified)
+
+    # 尝试加载已有 FAISS
+    db = load_faiss(file_name)
+    if db is None:
+        db = build_faiss_with_category(classified)
+        save_faiss(file_name, db)
+
     for query in ["work experience"]:
         print(f"\n=== 查询: {query} ===")
         result_text = query_dynamic_category(db, query, top_k=10, use_category_filter=True)

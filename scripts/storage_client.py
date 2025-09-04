@@ -1,58 +1,67 @@
 import boto3
 import os
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 class StorageClient:
     def __init__(self):
-        # 加载 .env 文件
         load_dotenv()
-
-        # 从环境变量读取配置
         self.endpoint = os.getenv("STORAGE_ENDPOINT")
         self.access_key = os.getenv("STORAGE_ACCESS_KEY")
         self.secret_key = os.getenv("STORAGE_SECRET_KEY")
         self.bucket = os.getenv("STORAGE_BUCKET")
 
-        # 初始化 S3 客户端（兼容 MinIO / AWS S3）
         self.s3 = boto3.client(
             "s3",
             endpoint_url=self.endpoint if self.endpoint else None,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
         )
-
-        # 确保 bucket 存在
         self.ensure_bucket()
 
     def ensure_bucket(self):
         """检查并创建存储桶"""
-        existing_buckets = [b['Name'] for b in self.s3.list_buckets().get('Buckets', [])]
-        if self.bucket not in existing_buckets:
-            self.s3.create_bucket(Bucket=self.bucket)
-            print(f"[INFO] Created bucket: {self.bucket}")
+        try:
+            existing_buckets = [b['Name'] for b in self.s3.list_buckets().get('Buckets', [])]
+            if self.bucket not in existing_buckets:
+                self.s3.create_bucket(Bucket=self.bucket)
+                logger.info(f"Created bucket: {self.bucket}")
+        except Exception as e:
+            logger.error(f"检查/创建 bucket 出错: {e}")
 
     def upload_file(self, file_path: str, object_name: str = None):
         """上传单个文件"""
-        if object_name is None:
-            object_name = os.path.basename(file_path)
-        self.s3.upload_file(Filename=file_path, Bucket=self.bucket, Key=object_name)
-        print(f"[INFO] Uploaded {file_path} as {object_name}")
+        try:
+            if object_name is None:
+                object_name = os.path.basename(file_path)
+            self.s3.upload_file(Filename=file_path, Bucket=self.bucket, Key=object_name)
+            logger.info(f"Uploaded {file_path} as {object_name}")
+        except Exception as e:
+            logger.error(f"上传文件失败 {file_path}: {e}")
 
     def upload_files(self, file_paths: list, max_workers: int = 4):
         """并发上传多个文件"""
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            executor.map(self.upload_file, file_paths)
-        print("[INFO] All files uploaded successfully")
+        try:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                executor.map(self.upload_file, file_paths)
+            logger.info("All files uploaded successfully")
+        except Exception as e:
+            logger.error(f"批量上传失败: {e}")
 
     def read_file(self, object_name: str, local_path: str = None) -> str:
         """读取文件并保存到本地"""
-        if local_path is None:
-            local_path = object_name
-        self.s3.download_file(Bucket=self.bucket, Key=object_name, Filename=local_path)
-        print(f"[INFO] Downloaded {object_name} to {local_path}")
-        return local_path
-
+        try:
+            if local_path is None:
+                local_path = object_name
+            self.s3.download_file(Bucket=self.bucket, Key=object_name, Filename=local_path)
+            logger.info(f"Downloaded {object_name} to {local_path}")
+            return local_path
+        except Exception as e:
+            logger.error(f"下载文件失败 {object_name}: {e}")
+            return None
 
 # =============================
 # ✅ 测试入口

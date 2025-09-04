@@ -1,0 +1,136 @@
+{
+  "WorkExperience": [
+    [
+      8,
+      "Professional Experience"
+    ],
+    [
+      9,
+      "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023"
+    ],
+    [
+      14,
+      "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present"
+    ]
+  ],
+  "Project": [
+    [
+      10,
+      "Built a QA system with Transformer, improving automated question answering accuracy."
+    ],
+    [
+      11,
+      "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%."
+    ],
+    [
+      12,
+      "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling."
+    ],
+    [
+      15,
+      "Built React agent with LangChain tool-calling to automate internal tool, reducing manual work."
+    ],
+    [
+      16,
+      "Created a token counter in Ollama to efficiently track and manage token usage."
+    ],
+    [
+      17,
+      "Built multi-agent system for sales and after-sales, streamlining communication and task flow."
+    ],
+    [
+      18,
+      "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows."
+    ],
+    [
+      19,
+      "Built a LangChain agent to automate Gmail email tracking and improve communication."
+    ],
+    [
+      20,
+      "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference."
+    ],
+    [
+      21,
+      "Projects"
+    ],
+    [
+      23,
+      "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload."
+    ],
+    [
+      24,
+      "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask."
+    ],
+    [
+      28,
+      "Built a Crypto analysis tool with transformer model and LLM for Realtime market prediction."
+    ],
+    [
+      29,
+      "Collected Bitfinex API data, trained transformer model with historical data, added vector database."
+    ],
+    [
+      30,
+      "Using metal model to stack transformer model and sentiment model to get 84% accuracy."
+    ]
+  ],
+  "Education": [
+    [
+      2,
+      "Applied Machine Intelligence with solid experience in Machine learning, Data Analysis, software development, and LLM. Seeking roles in those and others AI-related fields.Education"
+    ],
+    [
+      3,
+      "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0"
+    ],
+    [
+      4,
+      "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills"
+    ]
+  ],
+  "Skills": [
+    [
+      5,
+      "Languages & Tools: Python, SQL, Tableau"
+    ],
+    [
+      6,
+      "Frameworks & Libraries: TensorFlow, Pytorch, Scikit-learn, Pandas, NumPy, Seaborn, Langchain"
+    ],
+    [
+      7,
+      "Platforms & Tech: Ollama, Hugging Face"
+    ]
+  ],
+  "Other": [
+    [
+      0,
+      "Zhenyu Zhang"
+    ],
+    [
+      1,
+      "Phone: +1 (860) 234-7101 | Email: Zhang.zhenyu6@northeastern.edu | Linkedin Profile | GithubCareer Goal"
+    ],
+    [
+      13,
+      "Industry Experience"
+    ],
+    [
+      22,
+      "Flower Market Assistant"
+    ],
+    [
+      25,
+      "Increased online orders by 10% and reduced manual customer service workload by 40%."
+    ],
+    [
+      26,
+      "Sourced Code available on GitHub: Flower-Market-Assistant"
+    ],
+    [
+      27,
+      "Crypto Predicted and Analysis with Vester AI"
+    ]
+  ]
+}

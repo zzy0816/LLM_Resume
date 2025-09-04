@@ -2,11 +2,9 @@ import json
 import logging
 from dotenv import load_dotenv
 from docx import Document as DocxDocument
-
 from langchain.schema import Document as LC_Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-
 import ollama
 
 load_dotenv()
@@ -20,14 +18,14 @@ logger = logging.getLogger(__name__)
 MAX_CHUNK_SIZE = 400
 LLM_MODEL_NAME = "llama3.1:8b"
 
-
+# 读取 .docx 文件中的所有段落，并返回一个段落列表
 def read_docx_paragraphs(docx_path: str):
     doc = DocxDocument(docx_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     logger.info("Document split into %d paragraphs", len(paragraphs))
     return paragraphs
 
-
+# 调用 LLM（Ollama）+ 关键词回退，给每个段落打上分类标签
 def classify_paragraphs(paragraphs: list):
     classified = {"WorkExperience": [], "Project": [], "Education": [], "Skills": [], "Other": []}
 
@@ -84,7 +82,7 @@ def classify_paragraphs(paragraphs: list):
 
     return classified
 
-
+# 把长文本切成较小的语义片段，保证向量检索时更精准。
 def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
     sentences = [s.strip() for s in text.replace("\n", " ").split("。") if s.strip()]
     sub_chunks = []
@@ -100,10 +98,8 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
         sub_chunks.append(current.strip())
     return [sc for sc in sub_chunks if len(sc) > 30]
 
+# 基于分类结果构建带类别标签的 FAISS 向量数据库
 def build_faiss_with_category(classified_paragraphs, embeddings_model=None):
-    """
-    构建带类别 metadata 的 FAISS
-    """
     docs = []
     for category, lst in classified_paragraphs.items():
         for idx, para in lst:
@@ -119,6 +115,7 @@ def build_faiss_with_category(classified_paragraphs, embeddings_model=None):
     logger.info("FAISS database built with %d chunks", len(docs))
     return db
 
+# 根据用户的查询文本，推测属于哪一类
 def detect_query_category(query: str):
     query_lower = query.lower()
     if any(k in query_lower for k in ["work", "experience", "career", "job", "employment"]):
@@ -132,35 +129,55 @@ def detect_query_category(query: str):
     else:
         return "Other"
 
+# 结合 向量检索 + 目标类别过滤，返回最相关的段落，并调用 LLM 做摘要
+def query_dynamic_category(db, query: str, top_k=10, use_category_filter=True):
+    """
+    查询向量数据库，并返回原文段落，可选择是否按类别过滤
+    
+    Args:
+        db: FAISS 向量数据库
+        query: 用户输入的查询文本
+        top_k: 返回的段落数量
+        use_category_filter: 是否根据 detect_query_category 过滤类别
+        
+    Returns:
+        原文段落列表或格式化文本
+    """
+    docs = db.similarity_search(query, k=top_k * 3)  # 扩大检索范围
 
-def query_dynamic_category(db, query: str, top_k=10):
-    # 动态确定类别
-    target_category = detect_query_category(query)
+    if use_category_filter:
+        target_category = detect_query_category(query)
+        candidate_paras = [
+            doc.page_content for doc in docs
+            if doc.metadata.get("category") == target_category
+        ][:top_k]
 
-    # FAISS 检索 top_k
-    docs = db.similarity_search(query, k=top_k)
+        if not candidate_paras:
+            return f"No relevant content found in category {target_category}"
+    else:
+        # 不做类别过滤，直接取 top_k 最相似
+        candidate_paras = [doc.page_content for doc in docs][:top_k]
 
-    # 筛选属于目标类别的子块
-    candidate_paras = [doc.page_content for doc in docs if doc.metadata.get("category") == target_category]
+    # 格式化输出为原文形式
+    result_text = ""
+    for i, para in enumerate(candidate_paras, 1):
+        result_text += f"{i}. {para}\n\n"
 
-    if not candidate_paras:
-        return f"No relevant content found in category {target_category}"
+    return result_text
 
-    # LLM 聚合
-    llm_prompt = f"""
-你是智能简历助手。
-请根据用户查询 "{query}" 只保留以下段落中与 {target_category} 相关的内容：
-1. 删除所有与该类别无关的内容
-2. 输出完整、可读摘要，不允许包含其他类别内容
+# 直接返回某个类别的原始段落（不经检索，避免串类）
+def get_category_paragraphs(classified_paragraphs, category: str):
+    return [para for _, para in classified_paragraphs.get(category, [])]
 
-段落如下：
-{chr(10).join(candidate_paras)}
-"""
-    response = ollama.chat(
-        model=LLM_MODEL_NAME,
-        messages=[{"role": "user", "content": llm_prompt}]
-    )
-    return response.message.content
+# 输出某个类别下的所有原始段落，格式化编号，保证原文不改写
+def summarize_full_category(classified_paragraphs, category: str):
+    paras = [para for _, para in classified_paragraphs.get(category, [])]
+    if not paras:
+        return f"该简历中没有检测到 {category} 类内容。"
+    result = f"=== {category} 原文内容 ===\n\n"
+    for i, para in enumerate(paras, 1):
+        result += f"{i}. {para}\n\n"
+    return result
 
 if __name__ == "__main__":
     test_file = r"D:\project\LLM_Resume\downloads\Resume(AI).docx"
@@ -172,5 +189,5 @@ if __name__ == "__main__":
     db = build_faiss_with_category(classified)
     for query in ["work experience"]:
         print(f"\n=== 查询: {query} ===")
-        result_text = query_dynamic_category(db, query, top_k=10)
+        result_text = query_dynamic_category(db, query, top_k=10, use_category_filter=True)
         print(result_text)
