@@ -1,10 +1,14 @@
 import boto3
 import os
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
+from boto3.s3.transfer import TransferConfig
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 class StorageClient:
     def __init__(self):
@@ -32,36 +36,61 @@ class StorageClient:
         except Exception as e:
             logger.error(f"检查/创建 bucket 出错: {e}")
 
-    def upload_file(self, file_path: str, object_name: str = None):
-        """上传单个文件"""
-        try:
-            if object_name is None:
-                object_name = os.path.basename(file_path)
-            self.s3.upload_file(Filename=file_path, Bucket=self.bucket, Key=object_name)
-            logger.info(f"Uploaded {file_path} as {object_name}")
-        except Exception as e:
-            logger.error(f"上传文件失败 {file_path}: {e}")
+    def upload_file(self, file_path: str, object_name: str = None, retries: int = 3, delay: int = 2):
+        """上传单个文件，带重试和分块支持"""
+        object_name = object_name or os.path.basename(file_path)
+        config = TransferConfig(multipart_threshold=50*1024*1024)  # 50MB 起用分块上传
+
+        for attempt in range(1, retries + 1):
+            try:
+                self.s3.upload_file(Filename=file_path, Bucket=self.bucket, Key=object_name, Config=config)
+                logger.info(f"Uploaded {file_path} as {object_name}")
+                return True
+            except (EndpointConnectionError, ClientError) as e:
+                logger.warning(f"Attempt {attempt} failed for {file_path}: {e}")
+                time.sleep(delay)
+            except Exception as e:
+                logger.error(f"Unhandled error uploading {file_path}: {e}")
+                break
+        logger.error(f"All {retries} attempts failed for {file_path}")
+        return False
 
     def upload_files(self, file_paths: list, max_workers: int = 4):
-        """并发上传多个文件"""
-        try:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                executor.map(self.upload_file, file_paths)
-            logger.info("All files uploaded successfully")
-        except Exception as e:
-            logger.error(f"批量上传失败: {e}")
+        """并发上传多个文件，单文件失败不影响其他文件"""
+        results = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(self.upload_file, f): f for f in file_paths}
+            for fut in futures:
+                file = futures[fut]
+                try:
+                    results[file] = fut.result()
+                except Exception as e:
+                    logger.error(f"Unhandled error uploading {file}: {e}")
+                    results[file] = False
+        logger.info(f"Upload summary: {results}")
+        return results
 
-    def read_file(self, object_name: str, local_path: str = None) -> str:
-        """读取文件并保存到本地"""
-        try:
-            if local_path is None:
-                local_path = object_name
-            self.s3.download_file(Bucket=self.bucket, Key=object_name, Filename=local_path)
-            logger.info(f"Downloaded {object_name} to {local_path}")
+    def read_file(self, object_name: str, local_path: str = None, retries: int = 3, delay: int = 2) -> str:
+        """读取文件并保存到本地，带重试和缓存"""
+        local_path = local_path or object_name
+        if os.path.exists(local_path):
+            logger.info(f"Using cached file: {local_path}")
             return local_path
-        except Exception as e:
-            logger.error(f"下载文件失败 {object_name}: {e}")
-            return None
+
+        for attempt in range(1, retries + 1):
+            try:
+                self.s3.download_file(Bucket=self.bucket, Key=object_name, Filename=local_path)
+                logger.info(f"Downloaded {object_name} to {local_path}")
+                return local_path
+            except (EndpointConnectionError, ClientError) as e:
+                logger.warning(f"Attempt {attempt} failed for {object_name}: {e}")
+                time.sleep(delay)
+            except Exception as e:
+                logger.error(f"Unhandled error downloading {object_name}: {e}")
+                break
+        logger.error(f"All {retries} attempts failed for {object_name}")
+        return None
+
 
 # =============================
 # ✅ 测试入口

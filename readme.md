@@ -104,10 +104,15 @@ Web 控制台访问：http://localhost:9001
 
 ## 文件分段分类抓取
 
-1. 用docx分段落
-2. 用LLM为每段分类
-3. 用LangChain为每段生成faiss向量库
-4. 根据要求输出对应分类的段落
+简历处理主流程：
+1. 读取 Word 段落
+2. 段落语义拆分
+3. 正则兜底邮箱,电话等等
+4. 自定义结构化JSON
+5. 用NER解析成结构化字典
+6. 自动补全缺失字段
+7. 如果提供 FAISS，则进行语义补全
+8. 返回最终结构化字典
 
 ---
 
@@ -126,110 +131,87 @@ MINIO_BUCKET=resume-bucket
 ## 示例运行
 main.py 或 strealit run frontend.py
 
-""""""""""""""""""""""""""""""""
-====== 简历自动分类分析报告 ======
-
-
-=== WorkExperience ===
-=== WorkExperience 原文内容 ===
-
-1. Professional Experience
-
-2. Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023
-
-3. New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present
-
-
-
-=== Project ===
-=== Project 原文内容 ===
-
-1. Built a QA system with Transformer, improving automated question answering accuracy.
-
-2. Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.
-
-3. Built React agent with LangChain tool-calling to automate internal tool, reducing manual work.
-
-4. Created a token counter in Ollama to efficiently track and manage token usage.
-
-5. Built multi-agent system for sales and after-sales, streamlining communication and task flow.
-
-6. Built a LangChain agent to automate Gmail email tracking and improve communication.
-
-7. Projects
-
-8. Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.
-
-9. Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.
-
-10. Crypto Predicted and Analysis with Vester AI
-
-11. Built a Crypto analysis tool with transformer model and LLM for Realtime market prediction.
-
-12. Collected Bitfinex API data, trained transformer model with historical data, added vector database.
-
-13. Using metal model to stack transformer model and sentiment model to get 84% accuracy.
-
-
-
-=== Education ===
-=== Education 原文内容 ===
-
-1. Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0
-
-2. University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills
-
-
-
-=== Skills ===
-=== Skills 原文内容 ===
-
-1. Languages & Tools: Python, SQL, Tableau
-
-2. Frameworks & Libraries: TensorFlow, Pytorch, Scikit-learn, Pandas, NumPy, Seaborn, Langchain
-
-3. Platforms & Tech: Ollama, Hugging Face
-
-4. Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.
-
-5. Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.
-
-6. Increased online orders by 10% and reduced manual customer service workload by 40%.
-
-
-
-=== Other ===
-=== Other 原文内容 ===
-
-1. Zhenyu Zhang
-
-2. Phone: +1 (860) 234-7101 | Email: Zhang.zhenyu6@northeastern.edu | Linkedin Profile | GithubCareer Goal
-
-3. Applied Machine Intelligence with solid experience in Machine learning, Data Analysis, software development, and LLM. Seeking roles in those and others AI-related fields.Education
-
-4. Industry Experience
-
-5. Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.
-
-6. Flower Market Assistant
-
-7. Sourced Code available on GitHub: Flower-Market-Assistant
-
-
-
-====== 向量库问答（输入 q 退出） ======
-
-请输入查询内容: machine learning experience
-
-1. New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。
-
-
-
-请输入查询内容: q
-退出问答。
-
-""""""""""""""""""""""
-
+{
+    "message": "简历分析完成",
+    "report": {
+        "WorkExperience": [
+            {
+                "company": "New York Technology & Management LLC",
+                "title": "Programming Manager",
+                "start_date": "2025",
+                "end_date": "Present",
+                "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。"
+            },
+            {
+                "company": "Yangtze River Consulting Service LLC",
+                "title": "Ethical Consultant",
+                "start_date": "Unknown",
+                "end_date": "Unknown",
+                "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023。"
+            }
+        ],
+        "Project": [
+            {
+                "description": "Created a token counter in Ollama to efficiently track and manage token usage.。"
+            },
+            {
+                "description": "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.。"
+            },
+            {
+                "description": "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.。"
+            },
+            {
+                "description": "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.。"
+            },
+            {
+                "description": "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.。"
+            },
+            {
+                "description": "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.。"
+            },
+            {
+                "description": "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.。"
+            },
+            {
+                "description": "Built a QA system with Transformer, improving automated question answering accuracy.。"
+            },
+            {
+                "description": "Collected Bitfinex API data, trained transformer model with historical data, added vector database.。"
+            },
+            {
+                "description": "Using metal model to stack transformer model and sentiment model to get 84% accuracy.。"
+            }
+        ],
+        "Education": [
+            {
+                "school": "Northeastern University",
+                "degree": "Master of Professional Study in Applied Machine Intelligence",
+                "grad_date": "2025",
+                "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0。"
+            },
+            {
+                "school": "University of Connecticut",
+                "degree": "Bachelor of Art",
+                "grad_date": "N/A",
+                "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills。"
+            }
+        ],
+        "Skills": [
+            "Hugging face",
+            "Langchain",
+            "Numpy",
+            "Ollama",
+            "Pandas",
+            "Python",
+            "Pytorch",
+            "SQL",
+            "Scikit-learn",
+            "Seaborn",
+            "Tableau",
+            "Tensorflow"
+        ]
+    }
+}
 ---
 
 ## 注意事项
@@ -240,7 +222,8 @@ main.py 或 strealit run frontend.py
 ## 更新目标
 1. 目前的简历分析抓取中设置了分类, 未来也许可以考虑完全去除手动设置,全自动分析(已实现)
 2. FASTAPI:用户可以在前端(PostMan)选择文件,查看文件分析结果,适当追问,等等 (已实现)
-3. 继续优化LLM的分析能力
+3. 继续优化LLM的分析能力 (已实现: 数据结构化+NER模型抽取+正则兜底)
+4. 继续强化这三步: 更多结构化内容+抽取更完善(不再从中截断)+正则兜底
 
 ## 每周更新
 
@@ -254,3 +237,14 @@ main.py 或 strealit run frontend.py
 # week 2
 1. 添加FASTAPI, 可以通过postman进行简历分析 和 追问
 2. 用streamlit做了一个简单的前端,用户可以通过前端上传本地文件到MINIO,以及提供分析和追问功能
+
+
+3. 优化: 
+    - 1. fallback 增加关键词+全局语义模型
+    - 2. 上传/下载时加上异常处理: 重试和缓存 
+    - 3. faiss和classified 存储到本地/data文件夹下
+4. 优化分类能力: 
+    - 1. 数据结构化: 读取 Word 段落, 段落语义拆分, 文本和分类归一化去重, 技能提取与规范化, 自定义JSON结构包括大模块和模块包括的内容, 正则兜底邮箱,电话等等
+    - 2. NER模型抽取: 使用 yashpwr/resume-ner-bert-v2等做parsing, 解析成结构化字典, 使用语义回退 fallback, 去空+分类+对技能段落规范化+去重, 自动补全缺失字段,  返回最终结构化字典, 根据段落列表构建 FAISS 向量数据库并保存, 根据查询语义动态匹配分类, 根据 query 精准返回相关字段内容
+    - 3. 总流程: 1. 加载或解析简历(看data是否有classified), 2. 构建或加载 FAISS(看是否有faiss), 3. 查询 FAISS 并生成 query_results (NER模型解析抽取), 4. 使用 query 结果填充结构化 JSON (完成数据格式化), # 5. 保存最终 JSON 到 faiss文件夹
+
