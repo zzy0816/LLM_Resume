@@ -1,0 +1,112 @@
+{
+  "name": null,
+  "email": "Zhang.zhenyu6@northeastern.edu",
+  "phone": "+1860234-7101",
+  "education": [
+    {
+      "school": "Northeastern University",
+      "degree": "Master of Professional Study in Applied Machine Intelligence",
+      "grad_date": "April 2025",
+      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0。"
+    },
+    {
+      "school": "University of Connecticut",
+      "degree": "Bachelor of Art",
+      "grad_date": "May 2022Skills。",
+      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills。"
+    }
+  ],
+  "work_experience": [
+    {
+      "company": "New York Technology & Management LLC",
+      "title": "Programming Manager",
+      "start_date": "May 2025",
+      "end_date": "Present。",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。"
+    },
+    {
+      "company": "Yangtze River Consulting Service LLC",
+      "title": "Ethical Consultant",
+      "start_date": "Sep 2022",
+      "end_date": "Jul 2023。",
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023。"
+    }
+  ],
+  "projects": [
+    {
+      "title": "N/A",
+      "description": "Created a token counter in Ollama to efficiently track and manage token usage.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Built a QA system with Transformer, improving automated question answering accuracy.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Collected Bitfinex API data, trained transformer model with historical data, added vector database.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    },
+    {
+      "title": "N/A",
+      "description": "Using metal model to stack transformer model and sentiment model to get 84% accuracy.。",
+      "start_date": "Unknown",
+      "end_date": "Present"
+    }
+  ],
+  "skills": [
+    "Platforms & Tech: Ollama",
+    "Hugging Face。",
+    "Languages & Tools: Python",
+    "SQL",
+    "Tableau。",
+    "Frameworks & Libraries: TensorFlow",
+    "Pytorch",
+    "Scikit-learn",
+    "Pandas",
+    "NumPy",
+    "Seaborn",
+    "Langchain。"
+  ],
+  "other": []
+}

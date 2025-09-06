@@ -150,15 +150,92 @@ ner_pipeline = load_ner_pipeline()
 # -------------------------
 # 技能规范化
 # -------------------------
+import re
+from difflib import SequenceMatcher
+
+# -------------------------
+# 更稳健的技能规范化（替换原 normalize_skills）
+# -------------------------
 def normalize_skills(skills: list) -> list:
     skills_set = set()
     for s in skills:
-        s_lower = s.lower()
+        if not isinstance(s, str):
+            continue
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+        s_lower = s_clean.lower()
         if s_lower in ["sql","llm","aws","hugging","gpu","api"]:
             skills_set.add(s_lower.upper())
         else:
-            skills_set.add(s.capitalize())
-    return list(skills_set)
+            # 保持首字母大写形式（但如果原本已全大写也保留）
+            if s_clean.isupper():
+                skills_set.add(s_clean)
+            else:
+                skills_set.add(s_clean.capitalize())
+    return sorted(list(skills_set))
+
+# -------------------------
+# 文本归一化与相似度判断（用来去重）
+# -------------------------
+def normalize_text_for_compare(s: str) -> str:
+    if not isinstance(s, str):
+        return ""
+    s = s.lower().strip()
+    # 移除常见中英文标点并折叠空白
+    for ch in "。。，,、：:；;.-–—()[]{}\"'`··\u3000":
+        s = s.replace(ch, " ")
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+def similar_ratio(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+def is_duplicate_para(new_para: str, existing_list: list, threshold: float = 0.85) -> bool:
+    norm_new = normalize_text_for_compare(new_para)
+    if not norm_new:
+        return True
+    for e in existing_list:
+        # e 可能是 dict 或 str
+        if isinstance(e, dict):
+            text = e.get("description") or " ".join([str(v) for v in e.values()])
+        else:
+            text = str(e)
+        norm_e = normalize_text_for_compare(text)
+        if not norm_e:
+            continue
+        if norm_new in norm_e or norm_e in norm_new:
+            return True
+        if similar_ratio(norm_new, norm_e) >= threshold:
+            return True
+    return False
+
+# -------------------------
+# 技能从文本中提取（FAISS 返回的段落常常是 "Platforms & Tech: A, B"）
+# -------------------------
+def extract_skills_from_text(text: str) -> list:
+    if not isinstance(text, str):
+        return []
+    # 优先按 ":" 分割（常见 "Platforms & Tech: Ollama, Hugging Face"）
+    if ":" in text:
+        after = text.split(":", 1)[1]
+    else:
+        after = text
+    # 按常见分隔符切分
+    parts = re.split(r"[,\|;/、;]+", after)
+    skills = []
+    for p in parts:
+        p = p.strip()
+        # 忽略太短或包含描述性关键词的项
+        if len(p) <= 1:
+            continue
+        if any(k in p.lower() for k in ["platform", "tech", "languages", "tools", "frameworks"]):
+            continue
+        # 去掉末尾多余的句号/中文句号
+        p = p.rstrip("。.")
+        if p:
+            skills.append(p)
+    return skills
 
 # -------------------------
 # 分类段落
@@ -347,22 +424,141 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
 # -------------------------
 # 自动补全工作/教育字段
 # -------------------------
-# -------------------------
-# 2️⃣ auto_fill_fields（修改版）
-# -------------------------
 def auto_fill_fields(structured_resume: dict) -> dict:
     for cat, fields in CATEGORY_FIELDS.items():
+        new_entries = []
         for entry in structured_resume.get(cat, []):
-            for f in fields:
-                if f not in entry or entry[f] is None:
-                    if f == "skills":
-                        entry[f] = []
-                    elif f == "start_date":
-                        entry[f] = "Unknown"
-                    elif f == "end_date":
-                        entry[f] = "Present"
-                    else:
-                        entry[f] = "N/A"
+            # 如果 entry 是字符串，则包装为 dict
+            if isinstance(entry, str):
+                entry_dict = {f: None for f in fields}
+                if "description" in fields:
+                    entry_dict["description"] = entry
+                if "skills" in fields:
+                    entry_dict["skills"] = []
+                entry = entry_dict
+            # 如果 entry 是 dict，就确保包含所有字段
+            if isinstance(entry, dict):
+                for f in fields:
+                    if f not in entry or entry[f] is None:
+                        if f == "skills":
+                            entry[f] = []
+                        elif f == "start_date":
+                            entry[f] = "Unknown"
+                        elif f == "end_date":
+                            entry[f] = "Present"
+                        else:
+                            entry[f] = "N/A"
+                new_entries.append(entry)
+            else:
+                # 万一仍然是非法类型，转为 description dict
+                entry_dict = {f: None for f in fields}
+                if "description" in fields:
+                    entry_dict["description"] = str(entry)
+                for f in fields:
+                    if entry_dict[f] is None:
+                        if f == "skills":
+                            entry_dict[f] = []
+                        elif f == "start_date":
+                            entry_dict[f] = "Unknown"
+                        elif f == "end_date":
+                            entry_dict[f] = "Present"
+                        else:
+                            entry_dict[f] = "N/A"
+                new_entries.append(entry_dict)
+        structured_resume[cat] = new_entries
+
+    # 最后处理整体技能字段（保证为字符串列表并标准化）
+    if "skills" in structured_resume:
+        # 只保留字符串
+        structured_resume["skills"] = [s for s in structured_resume["skills"] if isinstance(s, str)]
+        structured_resume["skills"] = normalize_skills(structured_resume["skills"])
+
+    return structured_resume
+
+# -------------------------
+# 使用 FAISS 结果补全并去重（新增 faiss_auto_fill）
+# -------------------------
+def faiss_auto_fill(structured_resume: dict, db, top_k: int = 10) -> dict:
+    """
+    使用 FAISS 补全：按类别查询、解析并追加到 structured_resume（含去重逻辑）
+    """
+    cat2query = {
+        "work_experience": "工作经历",
+        "projects": "项目经历",
+        "education": "教育经历",
+        "skills": "技能"
+    }
+
+    for cat, q in cat2query.items():
+        res = query_dynamic_category(db, structured_resume, q, top_k=top_k)
+        candidates = res.get("results", []) if res else []
+
+        if not candidates:
+            continue
+
+        if cat == "skills":
+            # 从每个候选段落提取技能 token，合并
+            extracted = []
+            for para in candidates:
+                extracted.extend(extract_skills_from_text(para))
+            # 合并到主技能列表，去重由 normalize_skills 处理
+            structured_resume.setdefault("skills", [])
+            # 只添加非重复新技能
+            for sk in extracted:
+                # 基本去重：按 normalize_text_for_compare 判断
+                if not any(normalize_text_for_compare(sk) == normalize_text_for_compare(existing) for existing in structured_resume["skills"]):
+                    structured_resume["skills"].append(sk)
+            # 最终标准化
+            structured_resume["skills"] = normalize_skills(structured_resume["skills"])
+            continue
+
+        # 对于 work_experience / projects / education：
+        for para in candidates:
+            # 规范化 para（去掉句末句号）
+            para_clean = para.strip().rstrip("。.")
+            # 跳过重复段落
+            if is_duplicate_para(para_clean, structured_resume.get(cat, []), threshold=0.86):
+                continue
+
+            # 试解析工作经历常见格式 "Company | Title | Location | Start – End"
+            new_entry = {f: None for f in CATEGORY_FIELDS.get(cat, ["description"])}
+            new_entry["description"] = para_clean
+
+            # 解析 common "|" 分隔格式
+            parts = [p.strip().rstrip("。.") for p in para_clean.split("|") if p.strip()]
+            if cat == "work_experience" and len(parts) >= 2:
+                # company, title = parts[0], parts[1]
+                new_entry["company"] = parts[0]
+                # 有时 title 在 parts[1]，有时交换，尽量填 title 字段
+                new_entry["title"] = parts[1]
+                # 尝试从整段提取时间范围
+                date_match = re.search(r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{4}\b)[\w\s\.]*?)\s*[–-]\s*(?P<end>Present|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\b\d{4}\b)[\w\s\.]*)', para_clean, re.I)
+                if date_match:
+                    new_entry["start_date"] = date_match.group("start").strip()
+                    new_entry["end_date"] = date_match.group("end").strip()
+                else:
+                    new_entry["start_date"] = "Unknown"
+                    new_entry["end_date"] = "Present"
+
+            elif cat == "education" and len(parts) >= 1:
+                # 尝试常见 "School | Degree | ... | Year" 格式
+                new_entry["school"] = parts[0]
+                if len(parts) >= 2:
+                    new_entry["degree"] = parts[1]
+                # 年份尝试抽取
+                year_match = re.search(r"\b(19|20)\d{2}\b", para_clean)
+                if year_match:
+                    new_entry["grad_date"] = year_match.group()
+
+            else:
+                # projects / fallback：保持 description，start/end 留空由 auto_fill 填充
+                pass
+
+            structured_resume.setdefault(cat, [])
+            structured_resume[cat].append(new_entry)
+
+    # 最后再做字段补全与规范化
+    structured_resume = auto_fill_fields(structured_resume)
     return structured_resume
 
 # -------------------------
@@ -470,11 +666,79 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
 
     return {"query": query, "results": candidate_paras}
 
+def fill_query_exact(structured: dict, query_results: dict) -> dict:
+    """
+    使用 query_results 完全覆盖原 JSON 对应类别，
+    保留基础信息 (name/email/phone)
+    """
+    # 保留基础信息
+    base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
+
+    # 初始化空类别
+    structured = {
+        "name": base_info.get("name"),
+        "email": base_info.get("email"),
+        "phone": base_info.get("phone"),
+        "education": [],
+        "work_experience": [],
+        "projects": [],
+        "skills": [],
+        "other": []
+    }
+
+    # ---- 工作经历 ----
+    for para in query_results.get("工作经历", []):
+        parts = [p.strip() for p in para.split("|")]
+        entry = {
+            "company": parts[0] if len(parts) > 0 else "N/A",
+            "title": parts[1] if len(parts) > 1 else "N/A",
+            "start_date": "Unknown",
+            "end_date": "Unknown",
+            "description": para
+        }
+        if len(parts) > 3 and "–" in parts[3]:
+            start, end = parts[3].split("–")
+            entry["start_date"] = start.strip()
+            entry["end_date"] = end.strip()
+        structured["work_experience"].append(entry)
+
+    # ---- 教育经历 ----
+    for para in query_results.get("教育经历", []):
+        parts = [p.strip() for p in para.split("|")]
+        grad_date = parts[3] if len(parts) > 3 else "N/A"
+        entry = {
+            "school": parts[0] if len(parts) > 0 else "N/A",
+            "degree": parts[1] if len(parts) > 1 else "N/A",
+            "grad_date": grad_date,
+            "description": para
+        }
+        structured["education"].append(entry)
+
+    # ---- 项目经历 ----
+    for para in query_results.get("项目经历", []):
+        entry = {
+            "title": "N/A",
+            "description": para,
+            "start_date": "Unknown",
+            "end_date": "Present"
+        }
+        structured["projects"].append(entry)
+
+    # ---- 技能 ----
+    skills = []
+    for para in query_results.get("技能", []):
+        for s in re.split(r"[,\n;]", para):
+            s = s.strip()
+            if s:
+                skills.append(s)
+    structured["skills"] = list(dict.fromkeys(skills))  # 去重
+
+    return structured
 
 # -------------------------
 # 主流程示例
 # -------------------------
-if __name__=="__main__":
+if __name__ == "__main__":
     file_name = "Resume(AI).docx"
     file_path = f"./downloads/{file_name}"
 
@@ -483,24 +747,27 @@ if __name__=="__main__":
     if structured_resume is None:
         paragraphs = read_docx_paragraphs(file_path)
         structured_resume = parse_resume_to_structured(paragraphs)
-
-        # 自动补全字段 
         structured_resume = auto_fill_fields(structured_resume)
-
         save_json(file_name, structured_resume)
 
-    # 2️⃣ 打印结构化 JSON 到控制台
-    print("\n===== STRUCTURED RESUME JSON =====")
-    print(json.dumps(structured_resume, ensure_ascii=False, indent=2))
-
-    # 3️⃣ 构建或加载 FAISS
+    # 2️⃣ 构建或加载 FAISS
     db = load_faiss(file_name)
     if db is None:
         db = build_faiss(structured_resume)
         save_faiss(file_name, db)
 
-    # 4️⃣ 测试查询
-    for query in ["工作经历","项目","教育","技能"]:
-        result = query_dynamic_category(db, structured_resume, query, top_k=10)
-        print(f"\n===== QUERY RESULTS for '{query}' =====")
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+    # 3️⃣ 查询 FAISS 并生成 query_results
+    queries = ["工作经历", "项目经历", "教育经历", "技能"]
+    query_results = {}
+    for q in queries:
+        res = query_dynamic_category(db, structured_resume, q, top_k=10)
+        query_results[q] = res.get("results", [])
+
+    # 4️⃣ 使用 query 结果填充结构化 JSON
+    structured_resume = fill_query_exact(structured_resume, query_results)
+
+    # 5️⃣ 保存最终 JSON
+    save_json(file_name + "_faiss_confirmed", structured_resume)
+
+    print("\n===== FINAL STRUCTURED RESUME JSON =====")
+    print(json.dumps(structured_resume, ensure_ascii=False, indent=2))
