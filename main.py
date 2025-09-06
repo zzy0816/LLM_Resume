@@ -12,6 +12,7 @@ from scripts.upload_llm import (
     load_json,
     save_faiss,
     load_faiss,
+    main_pipeline
 )
 from scripts.storage_client import StorageClient
 
@@ -50,18 +51,7 @@ def analyze_resume(req: ResumeRequest):
     client.read_file(req.file_name, local_resume_path)
 
     # 尝试加载已有结构化 JSON
-    structured_resume = load_json(req.file_name)
-    if structured_resume is None:
-        # 解析简历段落
-        paragraphs = read_docx_paragraphs(local_resume_path)
-        structured_resume = parse_resume_to_structured(paragraphs)
-        save_json(req.file_name, structured_resume)
-
-    # 尝试加载已有 FAISS
-    db = load_faiss(req.file_name)
-    if db is None:
-        db = build_faiss(structured_resume)
-        save_faiss(req.file_name, db)
+    structured_resume = main_pipeline(req.file_name, mode="exact")
 
     # 生成报告（按类别汇总）
     report = {

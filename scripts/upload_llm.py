@@ -730,8 +730,15 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
 # -------------------------
 # 主流程示例
 # -------------------------
-if __name__ == "__main__":
-    file_name = "Resume(AI).docx"
+def main_pipeline(file_name: str, mode: str = "exact") -> dict:
+    """
+    主流程：解析简历 -> 构建FAISS -> 查询 -> 填充 -> 保存
+    Args:
+        file_name: 简历文件名
+        mode: 填充模式，目前支持 "exact"
+    Returns:
+        structured_resume: 最终结构化JSON
+    """
     file_path = f"./downloads/{file_name}"
 
     # 1️⃣ 加载或解析简历
@@ -756,10 +763,19 @@ if __name__ == "__main__":
         query_results[q] = res.get("results", [])
 
     # 4️⃣ 使用 query 结果填充结构化 JSON
-    structured_resume = fill_query_exact(structured_resume, query_results)
+    if mode == "exact":
+        structured_resume = fill_query_exact(structured_resume, query_results)
+    else:
+        raise ValueError(f"Unsupported mode: {mode}")
 
     # 5️⃣ 保存最终 JSON
     save_json(file_name + "_faiss_confirmed", structured_resume)
 
+    return structured_resume
+
+if __name__ == "__main__":
+    file_name = "Resume(AI).docx"
+    result = main_pipeline(file_name, mode="exact")
+
     print("\n===== FINAL STRUCTURED RESUME JSON =====")
-    print(json.dumps(structured_resume, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
