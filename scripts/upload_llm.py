@@ -325,7 +325,7 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
                 elif "end_date" in data and not data["end_date"]:
                     data["end_date"] = val
     except Exception as e:
-        print(f"[NER ERROR] {e}")
+        logger.warning(f"[NER ERROR] {e}")
 
     # ---- Step 4: 技能关键词补全 ----
     skill_keywords = [
@@ -574,7 +574,7 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
                 meta_cat = normalize_category(cat)
                 meta = {"category": meta_cat}
                 docs.append(LC_Document(page_content=sc, metadata=meta))
-                print(f"[FAISS INSERT] cat={meta_cat}, snippet={sc[:80]}")
+                logger.info("[FAISS INSERT] cat=%s, snippet=%s", meta_cat, sc[:80])
 
     logger.info("Total docs to insert into FAISS: %d", len(docs))
 
@@ -582,7 +582,7 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
         embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     if not docs:
-        print("[FAISS WARN] no docs to insert into FAISS (docs list empty)")
+        logger.warning("[FAISS WARN] no docs to insert into FAISS (docs list empty)")
         return None
 
     db = FAISS.from_documents(docs, embeddings_model)
@@ -610,7 +610,7 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
     基于 FAISS 查询指定类别段落（严格类别过滤）
     """
     docs = db.similarity_search(query, k=top_k*5)
-    print(f"[QUERY DEBUG] retrieved {len(docs)} docs for query='{query}'")
+    logger.debug("[QUERY DEBUG] retrieved %d docs for query='%s'", len(docs), query)
 
     candidate_paras = []
     target_category = normalize_category(detect_query_category(query))
@@ -646,13 +646,13 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
                 break
 
         if not candidate_paras:
-            print(f"[QUERY DEBUG] No candidate paragraphs found for query='{query}' with strict category filter.")
+            logger.warning("No candidate paragraphs found for query='%s' with strict category filter.", query)
             return {"query": query, "results": []}
     else:
         candidate_paras = [doc.page_content for doc in docs[:top_k]]
 
     for i, p in enumerate(candidate_paras):
-        print(f"[QUERY RESULT] {i+1}. {p[:140]}")
+        logger.info("[QUERY RESULT] %d. %s", i+1, p[:140])
 
     return {"query": query, "results": candidate_paras}
 
@@ -777,5 +777,5 @@ if __name__ == "__main__":
     file_name = "Resume(AI).docx"
     result = main_pipeline(file_name, mode="exact")
 
-    print("\n===== FINAL STRUCTURED RESUME JSON =====")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    logger.info("\n===== FINAL STRUCTURED RESUME JSON =====")
+    logger.info(json.dumps(result, ensure_ascii=False, indent=2))

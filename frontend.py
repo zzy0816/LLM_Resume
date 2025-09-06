@@ -168,7 +168,7 @@ if st.button("分析简历"):
             else:
                 for cat, text in report.items():
                     st.subheader(cat)
-                    st.text(text)
+                    st.json(text)
 
 # -----------------------------
 # 问答功能
@@ -210,4 +210,7 @@ if st.button("提交问题") and query_text:
                     st.stop()
 
                 st.subheader(f"答案（文件：{st.session_state.file_name}）")
-                st.text(answer if answer else "(空)")
+                if isinstance(answer, (dict, list)):
+                    st.json(answer)  # ✅ JSON 结构化展示
+                else:
+                    st.text(answer if answer else "(空)")
