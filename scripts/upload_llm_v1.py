@@ -1,11 +1,14 @@
 import json
+import os
 import logging
+import re
 from dotenv import load_dotenv
 from docx import Document as DocxDocument
 from langchain.schema import Document as LC_Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 import ollama
+from sentence_transformers import SentenceTransformer, util
 
 load_dotenv()
 
@@ -16,178 +19,488 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 MAX_CHUNK_SIZE = 400
-LLM_MODEL_NAME = "llama3.1:8b"
+LLM_MODEL_NAME = "llama3.2:3b"
 
-# 读取 .docx 文件中的所有段落，并返回一个段落列表
+CLASSIFIED_DIR = "./data/classified"
+FAISS_DIR = "./data/faiss"
+os.makedirs(CLASSIFIED_DIR, exist_ok=True)
+os.makedirs(FAISS_DIR, exist_ok=True)
+
+# -------------------------
+# 文件保存/加载
+# -------------------------
+def save_json(file_name: str, data: dict):
+    path = os.path.join(CLASSIFIED_DIR, f"{file_name}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    logger.info("Saved JSON to %s", path)
+
+def load_json(file_name: str) -> dict | None:
+    path = os.path.join(CLASSIFIED_DIR, f"{file_name}.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+# -------------------------
+# FAISS 保存 & 加载
+# -------------------------
+def save_faiss(file_name: str, db: FAISS):
+    save_path = os.path.join(FAISS_DIR, file_name)
+    os.makedirs(save_path, exist_ok=True)
+    db.save_local(save_path)
+    logger.info("Saved FAISS db to %s", save_path)
+
+def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
+    save_path = os.path.join(FAISS_DIR, file_name)
+    if os.path.exists(save_path):
+        if embeddings_model is None:
+            embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        return FAISS.load_local(save_path, embeddings_model, allow_dangerous_deserialization=True)
+    return None
+
+# -------------------------
+# 文档读取
+# -------------------------
 def read_docx_paragraphs(docx_path: str):
     doc = DocxDocument(docx_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     logger.info("Document split into %d paragraphs", len(paragraphs))
     return paragraphs
 
-# 调用 LLM（Ollama）+ 关键词回退，给每个段落打上分类标签
-def classify_paragraphs(paragraphs: list):
-    classified = {"WorkExperience": [], "Project": [], "Education": [], "Skills": [], "Other": []}
+# -------------------------
+# 全局语义模型
+# -------------------------
+semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-    system_prompt = """
-你是简历分类助手。请将输入段落严格分类为：
-- WorkExperience: 工作经历
-- Project: 项目经历
-- Education: 教育经历
-- Skills: 技能经历
-- Other: 其他
+def semantic_fallback(para_clean: str) -> str:
+    """基于语义相似度的回退分类"""
+    categories = {
+        "work_experience": "工作经历，如实习、任职、团队领导、负责项目",
+        "projects": "项目经历，如开发、实现、搭建、研究",
+        "education": "教育经历，如学位、本科、硕士、大学",
+        "skills": "技能，如Python、SQL、TensorFlow、PyTorch、机器学习",
+        "other": "其他内容"
+    }
+    para_emb = semantic_model.encode(para_clean, convert_to_tensor=True)
+    cat_embs = {cat: semantic_model.encode(desc, convert_to_tensor=True) for cat, desc in categories.items()}
+    sims = {cat: float(util.cos_sim(para_emb, emb)) for cat, emb in cat_embs.items()}
+    
+    # 选 top-2 并考虑阈值差
+    sorted_sims = sorted(sims.items(), key=lambda x: x[1], reverse=True)
+    best_cat, best_score = sorted_sims[0]
+    second_score = sorted_sims[1][1] if len(sorted_sims) > 1 else 0.0
 
-严格输出单行 JSON，例如：{"category": "WorkExperience"}
-"""
-    category_keywords = {
-        "WorkExperience": ["worked", "manager", "engineer", "internship", "experience", "lead", "responsible"],
-        "Project": ["built", "developed", "created", "implemented", "project"],
-        "Education": ["bachelor", "master", "university", "college", "degree"],
-        "Skills": ["python", "tensorflow", "pytorch", "sql", "machine learning", "skills"]
+    if best_score > 0.35 and (best_score - second_score) > 0.05:
+        return best_cat
+    return "other"
+
+
+# -------------------------
+# 正则兜底
+# -------------------------
+email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
+
+def extract_basic_info(text: str) -> dict:
+    result = {}
+    email_match = re.search(email_pattern, text)
+    phone_match = re.search(phone_pattern, text)
+    if email_match:
+        result["email"] = email_match.group()
+    if phone_match:
+        # 清理多余空格和括号
+        phone_clean = re.sub(r"[\s\(\)]", "", phone_match.group())
+        result["phone"] = phone_clean
+    return result
+
+
+# -------------------------
+# 分类归一化
+# -------------------------
+def normalize_category(cat: str) -> str:
+    mapping = {
+        "work": "work_experience",
+        "workexperience": "work_experience",
+        "work_experience": "work_experience",
+        "projects": "projects",
+        "project": "projects",
+        "education": "education",
+        "edu": "education",
+        "skills": "skills",
+        "skill": "skills",
+        "other": "other"
+    }
+    key = cat.lower().replace(" ", "").replace("_", "")
+    return mapping.get(key, "other")
+
+from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+
+# -------------------------
+# NER 模型加载（resume-ner）
+# -------------------------
+def load_ner_pipeline():
+    tokenizer = AutoTokenizer.from_pretrained("yashpwr/resume-ner-bert-v2")
+    model = AutoModelForTokenClassification.from_pretrained("yashpwr/resume-ner-bert-v2")
+    ner_pipe = pipeline("ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple")
+    return ner_pipe
+
+ner_pipeline = load_ner_pipeline()
+
+# -------------------------
+# 技能规范化
+# -------------------------
+def normalize_skills(skills: list) -> list:
+    skills_set = set()
+    for s in skills:
+        s_lower = s.lower()
+        if s_lower in ["sql","llm","aws","hugging","gpu","api"]:
+            skills_set.add(s_lower.upper())
+        else:
+            skills_set.add(s.capitalize())
+    return list(skills_set)
+
+# -------------------------
+# 分类段落
+# -------------------------
+# -------------------------
+# 1️⃣ classify_paragraphs（修改版）
+# -------------------------
+CATEGORY_FIELDS = {
+    "work_experience": ["title","company","start_date","end_date","description"],
+    "education": ["school","degree","grad_date","description"],
+    "projects": ["title","description","start_date","end_date"],
+    "skills": ["skills"],
+    "other": ["description"]
+}
+
+def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
+    para_clean = paragraph.strip().replace("\r", " ").replace("\n", " ")
+    if not para_clean:
+        return "other", {}
+
+    para_lower = para_clean.lower()
+
+    # ---- Step 1: 排除联系方式/基本信息 ----
+    info = extract_basic_info(para_clean)
+    if info:
+        structured["email"] = structured.get("email") or info.get("email")
+        structured["phone"] = structured.get("phone") or info.get("phone")
+        return "basic_info", {}
+
+    if any(k in para_lower for k in ["linkedin", "github", "电话", "邮箱"]):
+        return "basic_info", {}
+
+    # ---- Step 2: 判断类别并初始化 data ----
+    def init_data_for_category(cat, text):
+        fields = CATEGORY_FIELDS.get(cat, ["description"])
+        d = {f: None for f in fields}
+        if "description" in fields:
+            d["description"] = text
+        if "skills" in fields:
+            d["skills"] = []
+        return d
+
+    category = None
+    edu_keywords = ["university", "college", "学院", "大学", "bachelor", "master", "phd", "ma", "ms", "mba"]
+    work_keywords = ["intern", "engineer", "manager", "responsible", "工作", "实习", "任职", "developer", "consultant"]
+
+    if any(k in para_lower for k in edu_keywords):
+        category = "education"
+        data = init_data_for_category(category, para_clean)
+        parts = [p.strip() for p in para_clean.split("|")]
+        if len(parts) >= 2:
+            data["school"] = parts[0]
+            data["degree"] = parts[1]
+        for p in parts:
+            year_match = re.search(r"\b(19|20)\d{2}\b", p)
+            if year_match:
+                data["grad_date"] = data["grad_date"] or year_match.group()
+
+    elif any(k in para_lower for k in work_keywords):
+        category = "work_experience"
+        data = init_data_for_category(category, para_clean)
+        parts = [p.strip() for p in para_clean.split("|")]
+        if len(parts) >= 2:
+            data["company"] = parts[0]
+            data["title"] = parts[1]
+        for p in parts:
+            date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-9]{4})\s*–\s*(Present|[0-9]{4})", p, re.I)
+            if date_match:
+                data["start_date"] = date_match.group(1)
+                data["end_date"] = date_match.group(2)
+    else:
+        category = None
+        data = init_data_for_category("other", para_clean)
+
+    # ---- Step 3: NER 辅助解析 ----
+    try:
+        ner_results = ner_pipeline(para_clean)
+        for ent in ner_results:
+            label = ent["entity_group"].lower()
+            val = ent["word"].strip()
+            if label == "per" and structured.get("name") is None:
+                structured["name"] = val
+            elif label == "org" and "company" in data and not data["company"]:
+                data["company"] = val
+            elif label == "title" and "title" in data and not data["title"]:
+                data["title"] = val
+            elif label == "edu" and "school" in data and not data["school"]:
+                data["school"] = val
+            elif label == "degree" and "degree" in data and not data["degree"]:
+                data["degree"] = val
+            elif label == "skill" and "skills" in data and val not in data["skills"]:
+                data["skills"].append(val)
+            elif label == "date":
+                if "start_date" in data and not data["start_date"]:
+                    data["start_date"] = val
+                elif "end_date" in data and not data["end_date"]:
+                    data["end_date"] = val
+    except Exception as e:
+        print(f"[NER ERROR] {e}")
+
+    # ---- Step 4: 技能关键词补全 ----
+    skill_keywords = [
+        "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
+        "pytorch","keras","docker","kubernetes","aws","gcp","azure",
+        "spark","hadoop","tableau","powerbi","llm","llama","hugging"
+    ]
+    if "skills" in data:
+        for kw in skill_keywords:
+            if kw in para_lower and kw not in data["skills"]:
+                data["skills"].append(kw.upper() if kw in ["sql","llm","aws","hugging"] else kw.capitalize())
+
+    # ---- Step 5: fallback ----
+    if not category:
+        category = semantic_fallback(para_clean)
+        category = normalize_category(category)
+        data = init_data_for_category(category, para_clean)
+
+    return normalize_category(category), data
+
+# -------------------------
+# parse_resume_to_structured（修改版）
+# -------------------------
+def parse_resume_to_structured(paragraphs: list):
+    structured = {
+        "name": None,
+        "email": None,
+        "phone": None,
+        "education": [],
+        "work_experience": [],
+        "projects": [],
+        "skills": [],
+        "other": []
     }
 
-    for idx, para in enumerate(paragraphs):
-        para_clean = para.strip().replace("\n", " ")
-        category = "Other"
+    for para in paragraphs:
+        category, data = classify_paragraphs(para, structured)
 
-        try:
-            response = ollama.chat(
-                model=LLM_MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": para_clean}
-                ]
-            )
-            raw_content = response.message.content
-            try:
-                data = json.loads(raw_content)
-                category = data.get("category", "Other")
-                if category not in classified:
-                    category = "Other"
-            except json.JSONDecodeError:
-                # 关键词回退
-                para_lower = para_clean.lower()
-                for cat, keywords in category_keywords.items():
-                    if any(k in para_lower for k in keywords):
-                        category = cat
-                        break
-                logger.warning("JSON解析失败，将段落归类为 %s: %s", category, para_clean[:50])
-        except Exception as e:
-            logger.error("分类段落时出错: %s", str(e))
+        if category == "basic_info":
+            continue
+        elif category == "work_experience":
+            structured["work_experience"].append(data)
+        elif category == "projects":
+            structured["projects"].append(data)
+        elif category == "education":
+            structured["education"].append(data)
+        elif category == "skills":
+            structured["skills"].extend(data.get("skills", []))
+        else:
+            structured["other"].append(data)
 
-        classified[category].append((idx, para_clean))
+    # 技能去重 & 标准化
+    structured["skills"] = normalize_skills(structured["skills"])
 
-    for cat, lst in classified.items():
-        logger.info("%d paragraphs classified as %s", len(lst), cat)
+    # 自动补全字段
+    structured = auto_fill_fields(structured)
 
-    return classified
+    return structured
 
-# 把长文本切成较小的语义片段，保证向量检索时更精准。
+# -------------------------
+# FAISS 分段（增强教育段落保留短文本）
+# -------------------------
 def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
-    sentences = [s.strip() for s in text.replace("\n", " ").split("。") if s.strip()]
+    """
+    将文本按句拆分为子块，用于 FAISS 插入
+    - 对短段落（< max_size）保留
+    - 支持中文句号和英文逗号分句
+    """
+    sentences = re.split(r"[。,.]", text.replace("\n"," "))
+    sentences = [s.strip() for s in sentences if s.strip()]
     sub_chunks = []
     current = ""
     for s in sentences:
         if len(current) + len(s) + 1 <= max_size:
             current += s + "。"
         else:
-            if current.strip():
+            if current.strip(): 
                 sub_chunks.append(current.strip())
             current = s + "。"
-    if current.strip():
+    if current.strip(): 
         sub_chunks.append(current.strip())
-    return [sc for sc in sub_chunks if len(sc) > 30]
+    # 保留短段落，避免教育信息丢失
+    sub_chunks = [sc for sc in sub_chunks if len(sc) > 5]
+    return sub_chunks
 
-# 基于分类结果构建带类别标签的 FAISS 向量数据库
-def build_faiss_with_category(classified_paragraphs, embeddings_model=None):
+
+# -------------------------
+# 自动补全工作/教育字段
+# -------------------------
+# -------------------------
+# 2️⃣ auto_fill_fields（修改版）
+# -------------------------
+def auto_fill_fields(structured_resume: dict) -> dict:
+    for cat, fields in CATEGORY_FIELDS.items():
+        for entry in structured_resume.get(cat, []):
+            for f in fields:
+                if f not in entry or entry[f] is None:
+                    if f == "skills":
+                        entry[f] = []
+                    elif f == "start_date":
+                        entry[f] = "Unknown"
+                    elif f == "end_date":
+                        entry[f] = "Present"
+                    else:
+                        entry[f] = "N/A"
+    return structured_resume
+
+# -------------------------
+# FAISS 构建
+# -------------------------
+def build_faiss(structured_resume: dict, embeddings_model=None):
     docs = []
-    for category, lst in classified_paragraphs.items():
-        for idx, para in lst:
-            sub_chunks = semantic_split(para)
-            for sc in sub_chunks:
-                docs.append(LC_Document(page_content=sc, metadata={"category": category}))
+    for cat in ["work_experience", "projects", "education", "other"]:
+        for entry in structured_resume.get(cat, []):
+            fields_to_use = CATEGORY_FIELDS.get(cat, ["description"])
+            text_fields = [str(entry.get(f, "")) for f in fields_to_use if entry.get(f)]
+            if not text_fields:
+                text_fields = [str(entry.get("description", "")) or str(entry)]
+            text = " ".join(text_fields).strip()
+            if not text:
+                continue
+
+            chunks = semantic_split(text)
+            if not chunks:
+                chunks = [text]
+
+            for sc in chunks:
+                meta_cat = normalize_category(cat)
+                meta = {"category": meta_cat}
+                docs.append(LC_Document(page_content=sc, metadata=meta))
+                print(f"[FAISS INSERT] cat={meta_cat}, snippet={sc[:80]}")
+
+    logger.info("Total docs to insert into FAISS: %d", len(docs))
 
     if embeddings_model is None:
         embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        logger.info("Using HuggingFaceEmbeddings for FAISS")
+
+    if not docs:
+        print("[FAISS WARN] no docs to insert into FAISS (docs list empty)")
+        return None
 
     db = FAISS.from_documents(docs, embeddings_model)
     logger.info("FAISS database built with %d chunks", len(docs))
     return db
 
-# 根据用户的查询文本，推测属于哪一类
-def detect_query_category(query: str):
+# -------------------------
+# 查询接口
+# -------------------------
+def detect_query_category(query:str):
     query_lower = query.lower()
-    if any(k in query_lower for k in ["work", "experience", "career", "job", "employment"]):
-        return "WorkExperience"
-    elif any(k in query_lower for k in ["project", "built", "developed", "created"]):
-        return "Project"
-    elif any(k in query_lower for k in ["education", "degree", "university", "school", "bachelor", "master"]):
-        return "Education"
-    elif any(k in query_lower for k in ["skill", "skills", "python", "tensorflow", "ml", "pytorch", "sql"]):
-        return "Skills"
+    if any(k in query_lower for k in ["work","experience","career","job","employment","工作经历"]):
+        return "work_experience"
+    elif any(k in query_lower for k in ["project","built","developed","created","项目"]):
+        return "projects"
+    elif any(k in query_lower for k in ["education","degree","university","school","bachelor","master","教育"]):
+        return "education"
+    elif any(k in query_lower for k in ["skill","skills","python","tensorflow","ml","pytorch","sql","技能"]):
+        return "skills"
     else:
-        return "Other"
-
-# 结合 向量检索 + 目标类别过滤，返回最相关的段落，并调用 LLM 做摘要
-def query_dynamic_category(db, query: str, top_k=10, use_category_filter=True):
-    """
-    查询向量数据库，并返回原文段落，可选择是否按类别过滤
+        return None
     
-    Args:
-        db: FAISS 向量数据库
-        query: 用户输入的查询文本
-        top_k: 返回的段落数量
-        use_category_filter: 是否根据 detect_query_category 过滤类别
-        
-    Returns:
-        原文段落列表或格式化文本
+def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_category_filter=True):
     """
-    docs = db.similarity_search(query, k=top_k * 3)  # 扩大检索范围
+    基于 FAISS 查询指定类别段落（严格类别过滤）
+    """
+    docs = db.similarity_search(query, k=top_k*5)
+    print(f"[QUERY DEBUG] retrieved {len(docs)} docs for query='{query}'")
 
-    if use_category_filter:
-        target_category = detect_query_category(query)
-        candidate_paras = [
-            doc.page_content for doc in docs
-            if doc.metadata.get("category") == target_category
-        ][:top_k]
+    candidate_paras = []
+    target_category = normalize_category(detect_query_category(query))
+
+    if use_category_filter and target_category:
+        for doc in docs:
+            doc_cat = normalize_category(doc.metadata.get("category", "other"))
+
+            if target_category == "education":
+                doc_lower = doc.page_content.lower()
+                has_school = any(tok in doc_lower for tok in ["university","college","学院","大学"])
+                has_degree = any(tok in doc_lower for tok in ["bachelor","master","phd","bs","ms","mba","学士","硕士","博士"])
+                if doc_cat == "education" and (has_school or has_degree):
+                    candidate_paras.append(doc.page_content)
+
+            elif target_category == "skills":
+                skill_keywords = [
+                    "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
+                    "pytorch","keras","docker","kubernetes","aws","gcp","azure",
+                    "spark","hadoop","tableau","powerbi","llm","llama","hugging"
+                ]
+                if doc_cat == "skills":
+                    candidate_paras.append(doc.page_content)
+                elif doc_cat == "other" and len(doc.page_content) < 150:
+                    if any(k in doc.page_content.lower() for k in skill_keywords):
+                        candidate_paras.append(doc.page_content)
+
+            else:
+                if doc_cat == target_category:
+                    candidate_paras.append(doc.page_content)
+
+            if len(candidate_paras) >= top_k:
+                break
 
         if not candidate_paras:
-            return f"No relevant content found in category {target_category}"
+            print(f"[QUERY DEBUG] No candidate paragraphs found for query='{query}' with strict category filter.")
+            return {"query": query, "results": []}
     else:
-        # 不做类别过滤，直接取 top_k 最相似
-        candidate_paras = [doc.page_content for doc in docs][:top_k]
+        candidate_paras = [doc.page_content for doc in docs[:top_k]]
 
-    # 格式化输出为原文形式
-    result_text = ""
-    for i, para in enumerate(candidate_paras, 1):
-        result_text += f"{i}. {para}\n\n"
+    for i, p in enumerate(candidate_paras):
+        print(f"[QUERY RESULT] {i+1}. {p[:140]}")
 
-    return result_text
+    return {"query": query, "results": candidate_paras}
 
-# 直接返回某个类别的原始段落（不经检索，避免串类）
-def get_category_paragraphs(classified_paragraphs, category: str):
-    return [para for _, para in classified_paragraphs.get(category, [])]
 
-# 输出某个类别下的所有原始段落，格式化编号，保证原文不改写
-def summarize_full_category(classified_paragraphs, category: str):
-    paras = [para for _, para in classified_paragraphs.get(category, [])]
-    if not paras:
-        return f"该简历中没有检测到 {category} 类内容。"
-    result = f"=== {category} 原文内容 ===\n\n"
-    for i, para in enumerate(paras, 1):
-        result += f"{i}. {para}\n\n"
-    return result
+# -------------------------
+# 主流程示例
+# -------------------------
+if __name__=="__main__":
+    file_name = "Resume(AI).docx"
+    file_path = f"./downloads/{file_name}"
 
-if __name__ == "__main__":
-    test_file = r"D:\project\LLM_Resume\downloads\Resume(AI).docx"
-    paragraphs = read_docx_paragraphs(test_file)
-    classified = classify_paragraphs(paragraphs)
+    # 1️⃣ 加载或解析简历
+    structured_resume = load_json(file_name)
+    if structured_resume is None:
+        paragraphs = read_docx_paragraphs(file_path)
+        structured_resume = parse_resume_to_structured(paragraphs)
 
-    # 使用全部段落生成 FAISS 数据库
-    faiss_paras = [para for cat in classified.values() for idx, para in cat]
-    db = build_faiss_with_category(classified)
-    for query in ["work experience"]:
-        print(f"\n=== 查询: {query} ===")
-        result_text = query_dynamic_category(db, query, top_k=10, use_category_filter=True)
-        print(result_text)
+        # 自动补全字段 
+        structured_resume = auto_fill_fields(structured_resume)
+
+        save_json(file_name, structured_resume)
+
+    # 2️⃣ 打印结构化 JSON 到控制台
+    print("\n===== STRUCTURED RESUME JSON =====")
+    print(json.dumps(structured_resume, ensure_ascii=False, indent=2))
+
+    # 3️⃣ 构建或加载 FAISS
+    db = load_faiss(file_name)
+    if db is None:
+        db = build_faiss(structured_resume)
+        save_faiss(file_name, db)
+
+    # 4️⃣ 测试查询
+    for query in ["工作经历","项目","教育","技能"]:
+        result = query_dynamic_category(db, structured_resume, query, top_k=10)
+        print(f"\n===== QUERY RESULTS for '{query}' =====")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
