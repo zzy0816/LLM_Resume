@@ -7,7 +7,7 @@ from docx import Document as DocxDocument
 from langchain.schema import Document as LC_Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-import ollama
+from difflib import SequenceMatcher
 from sentence_transformers import SentenceTransformer, util
 
 load_dotenv()
@@ -148,12 +148,6 @@ def load_ner_pipeline():
 ner_pipeline = load_ner_pipeline()
 
 # -------------------------
-# 技能规范化
-# -------------------------
-import re
-from difflib import SequenceMatcher
-
-# -------------------------
 # 更稳健的技能规范化（替换原 normalize_skills）
 # -------------------------
 def normalize_skills(skills: list) -> list:
@@ -240,13 +234,10 @@ def extract_skills_from_text(text: str) -> list:
 # -------------------------
 # 分类段落
 # -------------------------
-# -------------------------
-# 1️⃣ classify_paragraphs（修改版）
-# -------------------------
 CATEGORY_FIELDS = {
     "work_experience": ["title","company","start_date","end_date","description"],
     "education": ["school","degree","grad_date","description"],
-    "projects": ["title","description","start_date","end_date"],
+    "projects": ["description"],
     "skills": ["skills"],
     "other": ["description"]
 }
@@ -419,7 +410,6 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
     # 保留短段落，避免教育信息丢失
     sub_chunks = [sc for sc in sub_chunks if len(sc) > 5]
     return sub_chunks
-
 
 # -------------------------
 # 自动补全工作/教育字段

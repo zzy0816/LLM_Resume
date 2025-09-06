@@ -7,7 +7,7 @@ from docx import Document as DocxDocument
 from langchain.schema import Document as LC_Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-import ollama
+from difflib import SequenceMatcher
 from sentence_transformers import SentenceTransformer, util
 
 load_dotenv()
@@ -148,12 +148,6 @@ def load_ner_pipeline():
 ner_pipeline = load_ner_pipeline()
 
 # -------------------------
-# 技能规范化
-# -------------------------
-import re
-from difflib import SequenceMatcher
-
-# -------------------------
 # 更稳健的技能规范化（替换原 normalize_skills）
 # -------------------------
 def normalize_skills(skills: list) -> list:
@@ -240,13 +234,10 @@ def extract_skills_from_text(text: str) -> list:
 # -------------------------
 # 分类段落
 # -------------------------
-# -------------------------
-# 1️⃣ classify_paragraphs（修改版）
-# -------------------------
 CATEGORY_FIELDS = {
     "work_experience": ["title","company","start_date","end_date","description"],
     "education": ["school","degree","grad_date","description"],
-    "projects": ["title","description","start_date","end_date"],
+    "projects": ["description"],
     "skills": ["skills"],
     "other": ["description"]
 }
@@ -419,7 +410,6 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
     # 保留短段落，避免教育信息丢失
     sub_chunks = [sc for sc in sub_chunks if len(sc) > 5]
     return sub_chunks
-
 
 # -------------------------
 # 自动补全工作/教育字段
@@ -674,8 +664,8 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
     # 保留基础信息
     base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
 
-    # 初始化空类别
-    structured = {
+    # 初始化空结构
+    new_structured = {
         "name": base_info.get("name"),
         "email": base_info.get("email"),
         "phone": base_info.get("phone"),
@@ -696,44 +686,46 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
             "end_date": "Unknown",
             "description": para
         }
-        if len(parts) > 3 and "–" in parts[3]:
-            start, end = parts[3].split("–")
-            entry["start_date"] = start.strip()
-            entry["end_date"] = end.strip()
-        structured["work_experience"].append(entry)
+        # 尝试解析时间范围
+        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*[-–]\s*(Present|\d{4})", para, re.I)
+        if date_match:
+            entry["start_date"] = date_match.group(1)
+            entry["end_date"] = date_match.group(2)
+        new_structured["work_experience"].append(entry)
 
     # ---- 教育经历 ----
     for para in query_results.get("教育经历", []):
         parts = [p.strip() for p in para.split("|")]
-        grad_date = parts[3] if len(parts) > 3 else "N/A"
         entry = {
             "school": parts[0] if len(parts) > 0 else "N/A",
             "degree": parts[1] if len(parts) > 1 else "N/A",
-            "grad_date": grad_date,
+            "grad_date": "N/A",
             "description": para
         }
-        structured["education"].append(entry)
+        # 尝试抽取年份
+        year_match = re.search(r"\b(19|20)\d{2}\b", para)
+        if year_match:
+            entry["grad_date"] = year_match.group()
+        new_structured["education"].append(entry)
 
     # ---- 项目经历 ----
     for para in query_results.get("项目经历", []):
-        entry = {
-            "title": "N/A",
-            "description": para,
-            "start_date": "Unknown",
-            "end_date": "Present"
-        }
-        structured["projects"].append(entry)
+        entry = {"description": para}
+        new_structured["projects"].append(entry)
 
     # ---- 技能 ----
-    skills = []
     for para in query_results.get("技能", []):
-        for s in re.split(r"[,\n;]", para):
-            s = s.strip()
-            if s:
-                skills.append(s)
-    structured["skills"] = list(dict.fromkeys(skills))  # 去重
+        extracted = extract_skills_from_text(para)
+        new_structured["skills"].extend(extracted)
 
-    return structured
+    # 技能去重 & 规范化
+    new_structured["skills"] = normalize_skills(new_structured["skills"])
+
+    # ---- 其他 ----
+    for para in query_results.get("其他", []):
+        new_structured["other"].append({"description": para})
+
+    return new_structured
 
 # -------------------------
 # 主流程示例
