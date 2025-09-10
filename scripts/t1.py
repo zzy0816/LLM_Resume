@@ -9,6 +9,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from difflib import SequenceMatcher
 from sentence_transformers import SentenceTransformer, util
+import torch
 
 load_dotenv()
 
@@ -25,6 +26,8 @@ CLASSIFIED_DIR = "./data/classified"
 FAISS_DIR = "./data/faiss"
 os.makedirs(CLASSIFIED_DIR, exist_ok=True)
 os.makedirs(FAISS_DIR, exist_ok=True)
+
+semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 # -------------------------
 # 文件保存/加载
@@ -60,6 +63,20 @@ def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
     return None
 
 # -------------------------
+# embed 保存 & 加载
+# -------------------------
+import numpy as np
+
+def save_embeddings(file_name, embs):
+    np.save(f"./data/classified/{file_name}_embs.npy", embs)
+
+def load_embeddings(file_name):
+    path = f"./data/classified/{file_name}_embs.npy"
+    if os.path.exists(path):
+        return np.load(path)
+    return None
+
+# -------------------------
 # 文档读取
 # -------------------------
 def read_docx_paragraphs(docx_path: str):
@@ -69,32 +86,63 @@ def read_docx_paragraphs(docx_path: str):
     return paragraphs
 
 # -------------------------
-# 全局语义模型
+# 批量 NER
 # -------------------------
-semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+def run_ner_batch(paragraphs: list[str]) -> list[list[dict]]:
+    """对段落列表做批量 NER，返回每段的实体结果"""
+    results = ner_pipeline(paragraphs, batch_size=8, truncation=True)
+    # transformers pipeline 返回的可能是 flat list，需要按段落分组
+    if isinstance(results[0], dict):
+        return [results]  # 单段落
+    # 已经是列表嵌套
+    return results
 
-def semantic_fallback(para_clean: str) -> str:
-    """基于语义相似度的回退分类"""
-    categories = {
+# -------------------------
+# 批量语义 fallback
+# -------------------------
+CATEGORY_EMBS = {
+    cat: semantic_model.encode(desc, convert_to_tensor=True)
+    for cat, desc in {
         "work_experience": "工作经历，如实习、任职、团队领导、负责项目",
         "projects": "项目经历，如开发、实现、搭建、研究",
         "education": "教育经历，如学位、本科、硕士、大学",
         "skills": "技能，如Python、SQL、TensorFlow、PyTorch、机器学习",
         "other": "其他内容"
-    }
-    para_emb = semantic_model.encode(para_clean, convert_to_tensor=True)
-    cat_embs = {cat: semantic_model.encode(desc, convert_to_tensor=True) for cat, desc in categories.items()}
-    sims = {cat: float(util.cos_sim(para_emb, emb)) for cat, emb in cat_embs.items()}
-    
-    # 选 top-2 并考虑阈值差
-    sorted_sims = sorted(sims.items(), key=lambda x: x[1], reverse=True)
-    best_cat, best_score = sorted_sims[0]
-    second_score = sorted_sims[1][1] if len(sorted_sims) > 1 else 0.0
+    }.items()
+}
 
-    if best_score > 0.35 and (best_score - second_score) > 0.05:
-        return best_cat
-    return "other"
+def semantic_fallback(paragraphs: list[str], file_name: str = None) -> list[str]:
+    """
+    批量语义回退分类，支持缓存 embeddings
+    """
+    para_embs = None
+    if file_name:
+        para_embs = load_embeddings(file_name)
 
+    if para_embs is None:
+        para_embs = semantic_model.encode(paragraphs, convert_to_tensor=True)
+        # Tensor 转 numpy 再存储
+        if isinstance(para_embs, torch.Tensor):
+            para_embs_np = para_embs.cpu().numpy()
+        else:
+            para_embs_np = para_embs
+        if file_name:
+            save_embeddings(file_name, para_embs_np)
+    else:
+        # 从缓存加载后转换为 tensor
+        para_embs = torch.tensor(para_embs)
+
+    results = []
+    for i, emb in enumerate(para_embs):
+        sims = {cat: float(util.cos_sim(emb, cat_emb)) for cat, cat_emb in CATEGORY_EMBS.items()}
+        sorted_sims = sorted(sims.items(), key=lambda x: x[1], reverse=True)
+        best_cat, best_score = sorted_sims[0]
+        second_score = sorted_sims[1][1] if len(sorted_sims) > 1 else 0.0
+        if best_score > 0.35 and (best_score - second_score) > 0.05:
+            results.append(best_cat)
+        else:
+            results.append("other")
+    return results
 
 # -------------------------
 # 正则兜底
@@ -242,20 +290,14 @@ CATEGORY_FIELDS = {
     "other": ["description"]
 }
 
-def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
-    """
-    对文档段落进行分类
-    1. 尝试NER模型识别关键实体
-    2. 如果NER未识别，则使用语义相似度回退分类
-    3. 对技能进行标准化
-    """
+def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_cat=None):
     para_clean = paragraph.strip().replace("\r", " ").replace("\n", " ")
     if not para_clean:
         return "other", {}
 
     para_lower = para_clean.lower()
 
-    # ---- Step 1: 排除联系方式/基本信息 ----
+    # ---- 基础信息 ----
     info = extract_basic_info(para_clean)
     if info:
         structured["email"] = structured.get("email") or info.get("email")
@@ -265,7 +307,7 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
     if any(k in para_lower for k in ["linkedin", "github", "电话", "邮箱"]):
         return "basic_info", {}
 
-    # ---- Step 2: 判断类别并初始化 data ----
+    # ---- 初始化 data ----
     def init_data_for_category(cat, text):
         fields = CATEGORY_FIELDS.get(cat, ["description"])
         d = {f: None for f in fields}
@@ -290,7 +332,6 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
             year_match = re.search(r"\b(19|20)\d{2}\b", p)
             if year_match:
                 data["grad_date"] = data["grad_date"] or year_match.group()
-
     elif any(k in para_lower for k in work_keywords):
         category = "work_experience"
         data = init_data_for_category(category, para_clean)
@@ -307,33 +348,33 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
         category = None
         data = init_data_for_category("other", para_clean)
 
-    # ---- Step 3: NER 辅助解析 ----
-    try:
-        ner_results = ner_pipeline(para_clean)
-        for ent in ner_results:
-            label = ent["entity_group"].lower()
-            val = ent["word"].strip()
-            if label == "per" and structured.get("name") is None:
-                structured["name"] = val
-            elif label == "org" and "company" in data and not data["company"]:
-                data["company"] = val
-            elif label == "title" and "title" in data and not data["title"]:
-                data["title"] = val
-            elif label == "edu" and "school" in data and not data["school"]:
-                data["school"] = val
-            elif label == "degree" and "degree" in data and not data["degree"]:
-                data["degree"] = val
-            elif label == "skill" and "skills" in data and val not in data["skills"]:
-                data["skills"].append(val)
-            elif label == "date":
-                if "start_date" in data and not data["start_date"]:
-                    data["start_date"] = val
-                elif "end_date" in data and not data["end_date"]:
-                    data["end_date"] = val
-    except Exception as e:
-        logger.warning(f"[NER ERROR] {e}")
+    # ---- 使用批量 NER 结果 ----
+    if ner_results:
+        try:
+            for ent in ner_results:
+                label = ent["entity_group"].lower()
+                val = ent["word"].strip()
+                if label == "per" and structured.get("name") is None:
+                    structured["name"] = val
+                elif label == "org" and "company" in data and not data["company"]:
+                    data["company"] = val
+                elif label == "title" and "title" in data and not data["title"]:
+                    data["title"] = val
+                elif label == "edu" and "school" in data and not data["school"]:
+                    data["school"] = val
+                elif label == "degree" and "degree" in data and not data["degree"]:
+                    data["degree"] = val
+                elif label == "skill" and "skills" in data and val not in data["skills"]:
+                    data["skills"].append(val)
+                elif label == "date":
+                    if "start_date" in data and not data["start_date"]:
+                        data["start_date"] = val
+                    elif "end_date" in data and not data["end_date"]:
+                        data["end_date"] = val
+        except Exception as e:
+            logger.warning(f"[NER ERROR] {e}")
 
-    # ---- Step 4: 技能关键词补全 ----
+    # ---- 技能关键词补全 ----
     skill_keywords = [
         "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
         "pytorch","keras","docker","kubernetes","aws","gcp","azure",
@@ -344,10 +385,9 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
             if kw in para_lower and kw not in data["skills"]:
                 data["skills"].append(kw.upper() if kw in ["sql","llm","aws","hugging"] else kw.capitalize())
 
-    # ---- Step 5: fallback ----
+    # ---- fallback 使用批量结果 ----
     if not category:
-        category = semantic_fallback(para_clean)
-        category = normalize_category(category)
+        category = normalize_category(sem_cat or "other")
         data = init_data_for_category(category, para_clean)
 
     return normalize_category(category), data
@@ -355,29 +395,18 @@ def classify_paragraphs(paragraph: str, structured: dict) -> tuple[str, dict]:
 # -------------------------
 # parse_resume_to_structured
 # -------------------------
-def parse_resume_to_structured(paragraphs: list):
-    """
-    将简历段落列表解析成结构化字典。
-    处理流程：
-    1. 遍历每段落，去除空段落。
-    2. 对段落进行分类（工作经历、项目经历、教育经历、技能、其他）。
-    3. 对技能段落进行技能提取与规范化。
-    4. 对文本重复段落进行去重。
-    """
+def parse_resume_to_structured(paragraphs: list, file_name: str = None):
     structured = {
-        "name": None,
-        "email": None,
-        "phone": None,
-        "education": [],
-        "work_experience": [],
-        "projects": [],
-        "skills": [],
-        "other": []
+        "name": None, "email": None, "phone": None,
+        "education": [], "work_experience": [], "projects": [], "skills": [], "other": []
     }
 
-    for para in paragraphs:
-        category, data = classify_paragraphs(para, structured)
+    # 批量 NER 和语义 fallback
+    ner_results_batch = run_ner_batch(paragraphs)
+    semantic_cats = semantic_fallback(paragraphs, file_name=file_name)
 
+    for para, ner_results, sem_cat in zip(paragraphs, ner_results_batch, semantic_cats):
+        category, data = classify_paragraphs(para, structured, ner_results, sem_cat)
         if category == "basic_info":
             continue
         elif category == "work_experience":
@@ -391,12 +420,8 @@ def parse_resume_to_structured(paragraphs: list):
         else:
             structured["other"].append(data)
 
-    # 技能去重 & 标准化
     structured["skills"] = normalize_skills(structured["skills"])
-
-    # 自动补全字段
     structured = auto_fill_fields(structured)
-
     return structured
 
 # -------------------------
@@ -695,7 +720,7 @@ def main_pipeline(file_name: str, mode: str = "exact") -> dict:
     structured_resume = load_json(file_name)
     if structured_resume is None:
         paragraphs = read_docx_paragraphs(file_path)
-        structured_resume = parse_resume_to_structured(paragraphs)
+        structured_resume = parse_resume_to_structured(paragraphs, file_name=file_name)
         structured_resume = auto_fill_fields(structured_resume)
         save_json(file_name, structured_resume)
 

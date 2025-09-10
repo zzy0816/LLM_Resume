@@ -1,0 +1,159 @@
+import re
+
+# -------------------------
+# 分类段落
+# -------------------------
+CATEGORY_FIELDS = {
+    "work_experience": ["title","company","start_date","end_date","description"],
+    "education": ["school","degree","grad_date","description"],
+    "projects": ["description"],
+    "skills": ["skills"],
+    "other": ["description"]
+}
+
+# -------------------------
+# 分类归一化
+# -------------------------
+def normalize_category(cat: str) -> str:
+    mapping = {
+        "work": "work_experience",
+        "workexperience": "work_experience",
+        "work_experience": "work_experience",
+        "projects": "projects",
+        "project": "projects",
+        "education": "education",
+        "edu": "education",
+        "skills": "skills",
+        "skill": "skills",
+        "other": "other"
+    }
+    key = cat.lower().replace(" ", "").replace("_", "")
+    return mapping.get(key, "other")
+
+
+# -------------------------
+# 更稳健的技能规范化
+# -------------------------
+def normalize_skills(skills: list) -> list:
+    skills_set = set()
+    for s in skills:
+        if not isinstance(s, str):
+            continue
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+        s_lower = s_clean.lower()
+        if s_lower in ["sql","llm","aws","hugging","gpu","api"]:
+            skills_set.add(s_lower.upper())
+        else:
+            # 保持首字母大写形式（但如果原本已全大写也保留）
+            if s_clean.isupper():
+                skills_set.add(s_clean)
+            else:
+                skills_set.add(s_clean.capitalize())
+    return sorted(list(skills_set))
+
+# -------------------------
+# 自动补全工作/教育字段
+# -------------------------
+def auto_fill_fields(structured_resume: dict) -> dict:
+    """
+    对解析后的结构化信息进行补全：
+    - 如果工作经历缺公司、职位，尝试从项目经历或教育经历推测
+    - 技能字段补全大小写统一
+    返回补全后的结构化字典
+    """
+    for cat, fields in CATEGORY_FIELDS.items():
+        new_entries = []
+        for entry in structured_resume.get(cat, []):
+            # 如果 entry 是字符串，则包装为 dict
+            if isinstance(entry, str):
+                entry_dict = {f: None for f in fields}
+                if "description" in fields:
+                    entry_dict["description"] = entry
+                if "skills" in fields:
+                    entry_dict["skills"] = []
+                entry = entry_dict
+            # 如果 entry 是 dict，就确保包含所有字段
+            if isinstance(entry, dict):
+                for f in fields:
+                    if f not in entry or entry[f] is None:
+                        if f == "skills":
+                            entry[f] = []
+                        elif f == "start_date":
+                            entry[f] = "Unknown"
+                        elif f == "end_date":
+                            entry[f] = "Present"
+                        else:
+                            entry[f] = "N/A"
+                new_entries.append(entry)
+            else:
+                # 万一仍然是非法类型，转为 description dict
+                entry_dict = {f: None for f in fields}
+                if "description" in fields:
+                    entry_dict["description"] = str(entry)
+                for f in fields:
+                    if entry_dict[f] is None:
+                        if f == "skills":
+                            entry_dict[f] = []
+                        elif f == "start_date":
+                            entry_dict[f] = "Unknown"
+                        elif f == "end_date":
+                            entry_dict[f] = "Present"
+                        else:
+                            entry_dict[f] = "N/A"
+                new_entries.append(entry_dict)
+        structured_resume[cat] = new_entries
+
+    # 最后处理整体技能字段（保证为字符串列表并标准化）
+    if "skills" in structured_resume:
+        # 只保留字符串
+        structured_resume["skills"] = [s for s in structured_resume["skills"] if isinstance(s, str)]
+        structured_resume["skills"] = normalize_skills(structured_resume["skills"])
+
+    return structured_resume
+
+# -------------------------
+# 正则兜底
+# -------------------------
+email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
+
+def extract_basic_info(text: str) -> dict:
+    result = {}
+    email_match = re.search(email_pattern, text)
+    phone_match = re.search(phone_pattern, text)
+    if email_match:
+        result["email"] = email_match.group()
+    if phone_match:
+        # 清理多余空格和括号
+        phone_clean = re.sub(r"[\s\(\)]", "", phone_match.group())
+        result["phone"] = phone_clean
+    return result
+
+# -------------------------
+# 技能从文本中提取
+# -------------------------
+def extract_skills_from_text(text: str) -> list:
+    if not isinstance(text, str):
+        return []
+    # 优先按 ":" 分割（常见 "Platforms & Tech: Ollama, Hugging Face"）
+    if ":" in text:
+        after = text.split(":", 1)[1]
+    else:
+        after = text
+    # 按常见分隔符切分
+    parts = re.split(r"[,\|;/、;]+", after)
+    skills = []
+    for p in parts:
+        p = p.strip()
+        # 忽略太短或包含描述性关键词的项
+        if len(p) <= 1:
+            continue
+        if any(k in p.lower() for k in ["platform", "tech", "languages", "tools", "frameworks"]):
+            continue
+        # 去掉末尾多余的句号/中文句号
+        p = p.rstrip("。.")
+        if p:
+            skills.append(p)
+    return skills
