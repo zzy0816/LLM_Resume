@@ -10,6 +10,7 @@ from semantic import build_faiss
 from parser import parse_resume_to_structured
 from utils import auto_fill_fields
 from query import query_dynamic_category, fill_query_exact
+from db import save_resume
 
 logging.basicConfig(
     level=logging.INFO,

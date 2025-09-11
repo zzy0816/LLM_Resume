@@ -4,6 +4,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import logging
 import re
+import pdfplumber
 from dotenv import load_dotenv
 from docx import Document as DocxDocument
 from difflib import SequenceMatcher
@@ -19,12 +20,35 @@ MAX_CHUNK_SIZE = 400
 # -------------------------
 # 文档读取
 # -------------------------
+def read_document_paragraphs(file_path: str):
+    """
+    统一读取 DOCX / PDF 文档为段落列表
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".docx":
+        return read_docx_paragraphs(file_path)
+    elif ext == ".pdf":
+        return read_pdf_paragraphs(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
+
 def read_docx_paragraphs(docx_path: str):
     doc = DocxDocument(docx_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    logger.info("Document split into %d paragraphs", len(paragraphs))
+    logger.info("DOCX split into %d paragraphs", len(paragraphs))
     return paragraphs
 
+def read_pdf_paragraphs(pdf_path: str):
+    paragraphs = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text()
+            if text:
+                # 按换行符分段
+                page_paras = [p.strip() for p in text.split("\n") if p.strip()]
+                paragraphs.extend(page_paras)
+    logger.info("PDF split into %d paragraphs", len(paragraphs))
+    return paragraphs
 # -------------------------
 # FAISS 分段（增强教育段落保留短文本）
 # -------------------------
