@@ -1,0 +1,41 @@
+{
+  "name": null,
+  "email": "Zhang.zhenyu6@northeastern.edu",
+  "phone": "+1860234-7101",
+  "education": [
+    {
+      "school": "N/A N/A N/A Platforms & Tech: Ollama。Hugging Face。",
+      "degree": "N/A",
+      "grad_date": "N/A",
+      "description": "N/A N/A N/A Platforms & Tech: Ollama。Hugging Face。"
+    },
+    {
+      "school": "University of Connecticut Bachelor of Art 2022 University of Connecticut",
+      "degree": "Bachelor of Art",
+      "grad_date": "2022",
+      "description": "University of Connecticut Bachelor of Art 2022 University of Connecticut | Bachelor of Art | Storrs。CT | May 2022。"
+    },
+    {
+      "school": "Northeastern University Master of Professional Study in Applied Machine Intelligence N/A Northeastern University",
+      "degree": "Master of Professional Study in Applied Machine Intelligence",
+      "grad_date": "N/A",
+      "description": "Northeastern University Master of Professional Study in Applied Machine Intelligence N/A Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston。"
+    }
+  ],
+  "work_experience": [
+    {
+      "company": "Ethical Consultant Yangtze River Consulting Service LLC Unknown Present Yangtze River Consulting Service LLC",
+      "title": "Ethical Consultant",
+      "start_date": "Unknown",
+      "end_date": "Unknown",
+      "description": "Ethical Consultant Yangtze River Consulting Service LLC Unknown Present Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township。NJ | Sep 2022 – Jul。"
+    }
+  ],
+  "projects": [],
+  "skills": [
+    "- built and deployed app for ngo to auto-publish messages via aws。boosting engagement 20%",
+    "- fine-tuned and quantized hugging face model on custom data for optimized。faster inference",
+    "Development。and llm。seeking roles in those and others ai-related fields"
+  ],
+  "other": []
+}
