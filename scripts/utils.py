@@ -32,8 +32,23 @@ def normalize_category(cat: str) -> str:
 
 
 # -------------------------
-# 更稳健的技能规范化
+# 技能标准化词典
 # -------------------------
+SKILL_NORMALIZATION = {
+    "hugging face": "HuggingFace",
+    "huggingface": "HuggingFace",
+    "langchain": "LangChain",
+    "ollama": "Ollama",
+    "pytorch": "PyTorch",
+    "tensorflow": "TensorFlow",
+    "scikit-learn": "Scikit-learn",
+    "numpy": "NumPy",
+    "pandas": "Pandas",
+    "sql": "SQL",
+    "llm": "LLM",
+    "aws": "AWS"
+}
+
 def normalize_skills(skills: list) -> list:
     skills_set = set()
     for s in skills:
@@ -42,16 +57,22 @@ def normalize_skills(skills: list) -> list:
         s_clean = s.strip()
         if not s_clean:
             continue
+
         s_lower = s_clean.lower()
-        if s_lower in ["sql","llm","aws","hugging","gpu","api"]:
-            skills_set.add(s_lower.upper())
+
+        # 如果在标准化词典里，直接替换
+        if s_lower in SKILL_NORMALIZATION:
+            skills_set.add(SKILL_NORMALIZATION[s_lower])
+            continue
+
+        # 否则做基本规则化
+        if s_clean.isupper():
+            skills_set.add(s_clean)
         else:
-            # 保持首字母大写形式（但如果原本已全大写也保留）
-            if s_clean.isupper():
-                skills_set.add(s_clean)
-            else:
-                skills_set.add(s_clean.capitalize())
+            skills_set.add(s_clean.capitalize())
+
     return sorted(list(skills_set))
+
 
 # -------------------------
 # 自动补全工作/教育字段

@@ -72,7 +72,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 
 if __name__ == "__main__":
     # 批量文件处理示例
-    files_to_process = ["Resume(AI).docx", "Resume(AI).pdf"]
+    files_to_process = ["Resume(AI).docx"]
     all_results = main_pipeline(files_to_process, mode="exact")
 
     for user_email, structured_resume in all_results.items():
