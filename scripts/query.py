@@ -87,16 +87,15 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
 
 def fill_query_exact(structured: dict, query_results: dict) -> dict:
     """
-    使用 query_results 完全覆盖原 JSON 对应类别，
-    保留基础信息 (name/email/phone)
-    根据 query 精准返回相关字段内容
-    - 如果 query 是技能列表，返回匹配技能
-    - 如果 query 是其他类别，返回对应列表
+    使用 query_results 完全覆盖原 JSON 对应类别
+    - 保留基础信息 (name/email/phone)
+    - 工作经历：合并所有任务描述
+    - 独立项目：按换行合并成 project_title + project_content
+    - 技能列表规范化
     """
-    # 保留基础信息
+    # 基础信息
     base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
 
-    # 初始化空结构
     new_structured = {
         "name": base_info.get("name"),
         "email": base_info.get("email"),
@@ -108,64 +107,84 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
         "other": []
     }
 
+    # ---- 教育经历 ----
+    edu_date_pattern = re.compile(
+        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+        r"(\d{4})",
+        re.I
+    )
+
+    for para in query_results.get("教育经历", []):
+        parts = [p.strip() for p in para.split("|")]
+        entry = {
+            "school": parts[0] if len(parts) > 0 else "N/A",
+            "degree": parts[1] if len(parts) > 1 else "N/A",
+            "grad_date": "Unknown",
+            "description": para
+        }
+        match = edu_date_pattern.search(para)
+        if match:
+            month, year = match.groups()
+            entry["grad_date"] = f"{month} {year}" if month else year
+
+        new_structured["education"].append(entry)
+
     # ---- 工作经历 ----
+    work_date_pattern = re.compile(
+        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+        r"(\d{4})\s*[-–]\s*"
+        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+        r"(Present|\d{4})",
+        re.I
+    )
+
     for para in query_results.get("工作经历", []):
         parts = [p.strip() for p in para.split("|")]
         entry = {
             "company": parts[0] if len(parts) > 0 else "N/A",
             "title": parts[1] if len(parts) > 1 else "N/A",
             "start_date": "Unknown",
-            "end_date": "Unknown",
+            "end_date": "Present",
             "description": para
         }
-        # 尝试解析时间范围
-        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*[-–]\s*(Present|\d{4})", para, re.I)
-        if date_match:
-            entry["start_date"] = date_match.group(1)
-            entry["end_date"] = date_match.group(2)
+        match = work_date_pattern.search(para)
+        if match:
+            start_month, start_year, end_month, end_year = match.groups()
+            entry["start_date"] = f"{start_month} {start_year}" if start_month else start_year
+            entry["end_date"] = f"{end_month} {end_year}" if end_month else end_year
+
         new_structured["work_experience"].append(entry)
 
-    # ---- 教育经历 ----
-    for para in query_results.get("教育经历", []):
-        parts = [p.strip() for p in para.split("|")]
-        entry = {
-            "school": parts[0] if len(parts) > 0 else "N/A",
-            "degree": parts[1] if len(parts) > 1 else "N/A",
-            "grad_date": "N/A",
-            "description": para
-        }
-        # 尝试抽取年份
-        year_match = re.search(r"\b(19|20)\d{2}\b", para)
-        if year_match:
-            entry["grad_date"] = year_match.group()
-        new_structured["education"].append(entry)
-
-    # ---- 项目经历 ----
+    # ---- 独立项目 ----
     for para in query_results.get("项目经历", []):
+        # 按换行拆分，每行去掉首尾空格
+        lines = [l.strip() for l in para.split("\n") if l.strip()]
+        if not lines:
+            continue
+
+        # 第一行为标题，其余为内容
+        title = lines[0]
+        content = "\n".join(lines[1:]) if len(lines) > 1 else lines[0]
+
         entry = {
-            "project_title": None,
+            "project_title": title,
             "start_date": "Unknown",
             "end_date": "Present",
-            "project_content": para
+            "project_content": content
         }
-        # 尝试提取标题
-        title_match = re.match(r"^(.*?)[:\-]", para)
-        if title_match:
-            entry["project_title"] = title_match.group(1).strip()
-        # 尝试提取日期
-        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*[-–]\s*(Present|\d{4})", para, re.I)
-        if date_match:
-            entry["start_date"] = date_match.group(1)
-            entry["end_date"] = date_match.group(2)
-        new_structured["projects"].append(entry)
 
+        # 尝试解析年份作为开始日期
+        year_match = re.search(r"\b(19|20)\d{2}\b", para)
+        if year_match:
+            entry["start_date"] = year_match.group()
+
+        new_structured["projects"].append(entry)
 
     # ---- 技能 ----
     for para in query_results.get("技能", []):
         extracted = extract_skills_from_text(para)
         new_structured["skills"].extend(extracted)
 
-    # 技能去重 & 规范化
     new_structured["skills"] = normalize_skills(new_structured["skills"])
 
     # ---- 其他 ----

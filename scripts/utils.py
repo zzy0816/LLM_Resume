@@ -73,7 +73,6 @@ def normalize_skills(skills: list) -> list:
 
     return sorted(list(skills_set))
 
-
 # -------------------------
 # 自动补全工作/教育/项目字段
 # -------------------------
@@ -140,14 +139,22 @@ phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
 
 def extract_basic_info(text: str) -> dict:
     result = {}
+    # 提取 email
     email_match = re.search(email_pattern, text)
-    phone_match = re.search(phone_pattern, text)
     if email_match:
         result["email"] = email_match.group()
+    # 提取电话
+    phone_match = re.search(phone_pattern, text)
     if phone_match:
-        # 清理多余空格和括号
         phone_clean = re.sub(r"[\s\(\)]", "", phone_match.group())
         result["phone"] = phone_clean
+    # 兜底提取名字（假设首行或 email 上方）
+    if "email" in result:
+        first_line = text.split("\n")[0].strip()
+        if first_line and not re.search(email_pattern, first_line):
+            name_match = re.match(r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)", first_line)
+            if name_match:
+                result["name"] = name_match.group(1)
     return result
 
 # -------------------------

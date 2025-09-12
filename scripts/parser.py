@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import logging
 import re
-from utils import CATEGORY_FIELDS, normalize_category, normalize_skills , auto_fill_fields, SKILL_NORMALIZATION
+from utils import CATEGORY_FIELDS, normalize_category, normalize_skills, auto_fill_fields, SKILL_NORMALIZATION, extract_basic_info, extract_skills_from_text
 from ner import run_ner_batch
 from utils_parser import semantic_fallback
 
@@ -61,22 +61,16 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
         if len(parts) >= 2:
             data["school"] = parts[0]
             data["degree"] = parts[1]
-        for p in parts:
-            year_match = re.search(r"\b(19|20)\d{2}\b", p)
-            if year_match:
-                data["grad_date"] = year_match.group()
-    elif any(k in para_lower for k in work_keywords):
-        category = "work_experience"
-        data = init_data_for_category(category, para_clean)
-        parts = [p.strip() for p in para_clean.split("|")]
-        if len(parts) >= 2:
-            data["company"] = parts[0]
-            data["title"] = parts[1]
-        for p in parts:
-            date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|[0-9]{4})\s*–\s*(Present|[0-9]{4})", p, re.I)
-            if date_match:
-                data["start_date"] = date_match.group(1)
-                data["end_date"] = date_match.group(2)
+
+        date_pattern = re.compile(
+            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+            r"(\d{4})",
+            re.I
+        )
+        match = date_pattern.search(para_clean)
+        if match:
+            month, year = match.groups()
+            data["grad_date"] = f"{month} {year}" if month else year
     elif any(k in para_lower for k in proj_keywords):
         category = "projects"
         data = init_data_for_category(category, para_clean)
@@ -91,6 +85,27 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
             data["end_date"] = date_match.group(2)
         # 内容
         data["project_content"] = para_clean
+    elif any(k in para_lower for k in work_keywords):
+        category = "work_experience"
+        data = init_data_for_category(category, para_clean)
+        parts = [p.strip() for p in para_clean.split("|")]
+        if len(parts) >= 2:
+            data["company"] = parts[0]
+            data["title"] = parts[1]
+
+        # 使用统一正则解析日期
+        date_pattern = re.compile(
+            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+            r"(\d{4})\s*[-–]\s*"
+            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+            r"(Present|\d{4})",
+            re.I
+        )
+        match = date_pattern.search(para_clean)
+        if match:
+            start_month, start_year, end_month, end_year = match.groups()
+            data["start_date"] = f"{start_month} {start_year}" if start_month else start_year
+            data["end_date"] = f"{end_month} {end_year}" if end_month else end_year
     else:
         category = "other"
         data = init_data_for_category(category, para_clean)
@@ -140,29 +155,133 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
 # -------------------------
 def parse_resume_to_structured(paragraphs: list, file_name: str = None):
     structured = {
-        "name": None, "email": None, "phone": None,
-        "education": [], "work_experience": [], "projects": [], "skills": [], "other": []
+        "name": None,
+        "email": None,
+        "phone": None,
+        "education": [],
+        "work_experience": [],
+        "projects": [],
+        "skills": [],
+        "other": []
     }
 
-    # 批量 NER 和语义 fallback
     ner_results_batch = run_ner_batch(paragraphs)
     semantic_cats = semantic_fallback(paragraphs, file_name=file_name)
 
+    current_work = None
     for para, ner_results, sem_cat in zip(paragraphs, ner_results_batch, semantic_cats):
-        category, data = classify_paragraphs(para, structured, ner_results, sem_cat)
-        if category == "basic_info":
+        para_clean = para.strip().replace("\r", " ").replace("\n", " ")
+        if not para_clean:
             continue
-        elif category == "work_experience":
-            structured["work_experience"].append(data)
-        elif category == "projects":
-            structured["projects"].append(data)
-        elif category == "education":
-            structured["education"].append(data)
-        elif category == "skills":
-            structured["skills"].extend(data.get("skills", []))
-        else:
-            structured["other"].append(data)
 
+        # ---- 基础信息 ----
+        info = extract_basic_info(para_clean)
+        if info:
+            structured["email"] = structured.get("email") or info.get("email")
+            structured["phone"] = structured.get("phone") or info.get("phone")
+            structured["name"] = structured.get("name") or info.get("name")
+            continue
+        if any(k in para_clean.lower() for k in ["linkedin", "github", "电话", "邮箱"]):
+            continue
+
+        para_lower = para_clean.lower()
+
+        # ---- 教育经历 ----
+        edu_keywords = ["university", "college", "学院", "大学", "bachelor", "master", "phd", "ma", "ms", "mba"]
+        if any(k in para_lower for k in edu_keywords):
+            parts = [p.strip() for p in para_clean.split("|")]
+            entry = {
+                "school": parts[0] if len(parts) > 0 else "N/A",
+                "degree": parts[1] if len(parts) > 1 else "N/A",
+                "grad_date": "Unknown",
+                "description": para_clean
+            }
+
+            # 增强日期匹配：支持完整月份可选 + 年份
+            date_pattern = re.compile(
+                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+                r"(\d{4})",
+                re.I
+            )
+            match = date_pattern.search(para_clean)
+            if match:
+                month, year = match.groups()
+                entry["grad_date"] = f"{month} {year}" if month else year
+
+            structured["education"].append(entry)
+
+        # ---- 工作经历 ----
+        work_keywords = ["intern", "engineer", "manager", "responsible", "工作", "实习", "任职", "developer", "consultant"]
+        if any(k in para_lower for k in work_keywords):
+            parts = [p.strip() for p in para_clean.split("|")]
+            current_work = {
+                "company": parts[0] if len(parts) > 0 else "N/A",
+                "title": parts[1] if len(parts) > 1 else "N/A",
+                "start_date": "Unknown",
+                "end_date": "Present",
+                "description": para_clean
+            }
+
+            # 增强日期匹配：支持完整月份名或缩写 + 年份
+            date_pattern = re.compile(
+                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+                r"(\d{4})\s*[-–]\s*"
+                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
+                r"(Present|\d{4})",
+                re.I
+            )
+
+            match = date_pattern.search(para_clean)
+            if match:
+                start_month, start_year, end_month, end_year = match.groups()
+                start_date = f"{start_month} {start_year}" if start_month else start_year
+                end_date = f"{end_month} {end_year}" if end_month else end_year
+                current_work["start_date"] = start_date
+                current_work["end_date"] = end_date
+
+            structured["work_experience"].append(current_work)
+
+        # ---- 独立项目经历 ----
+        project_keywords = ["project", "built", "developed", "created", "项目"]
+        if any(k in para_lower for k in project_keywords):
+            # 如果有当前工作经历，把它当作工作任务
+            if current_work:
+                current_work["description"] += "\n- " + para_clean
+            else:
+                # 独立项目
+                entry = {
+                    "project_title": None,
+                    "start_date": "Unknown",
+                    "end_date": "Present",
+                    "project_content": para_clean
+                }
+                # 尝试解析项目标题 (冒号或首句)
+                if ":" in para_clean:
+                    entry["project_title"] = para_clean.split(":", 1)[0].strip()
+                else:
+                    entry["project_title"] = para_clean.split()[0].strip()
+                # 尝试解析年份
+                year_match = re.search(r"\b(19|20)\d{2}\b", para_clean)
+                if year_match:
+                    entry["start_date"] = year_match.group()
+                structured["projects"].append(entry)
+            continue
+
+        # ---- 技能 ----
+        skill_keywords = [
+            "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
+            "pytorch","keras","docker","kubernetes","aws","gcp","azure",
+            "spark","hadoop","tableau","powerbi","llm","llama","hugging"
+        ]
+        if any(k in para_lower for k in skill_keywords):
+            extracted = extract_skills_from_text(para_clean)
+            structured["skills"].extend(extracted)
+            continue
+
+        # ---- 其他 ----
+        structured["other"].append({"description": para_clean})
+
+    # 去重 & 标准化技能
     structured["skills"] = normalize_skills(structured["skills"])
     structured = auto_fill_fields(structured)
     return structured
