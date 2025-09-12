@@ -44,6 +44,14 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
             if not chunks:
                 chunks = [text]
 
+            if cat == "projects":
+                text_fields = [
+                    str(entry.get("project_title", "")),
+                    str(entry.get("project_content", "")),
+                    str(entry.get("start_date", "")),
+                    str(entry.get("end_date", ""))
+                ]
+
             for sc in chunks:
                 meta_cat = normalize_category(cat)
                 meta = {"category": meta_cat}

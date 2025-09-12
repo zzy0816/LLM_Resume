@@ -6,7 +6,7 @@ import re
 CATEGORY_FIELDS = {
     "work_experience": ["title","company","start_date","end_date","description"],
     "education": ["school","degree","grad_date","description"],
-    "projects": ["description"],
+    "projects": ["project_title","start_date","end_date","project_content"],
     "skills": ["skills"],
     "other": ["description"]
 }
@@ -75,14 +75,13 @@ def normalize_skills(skills: list) -> list:
 
 
 # -------------------------
-# 自动补全工作/教育字段
+# 自动补全工作/教育/项目字段
 # -------------------------
 def auto_fill_fields(structured_resume: dict) -> dict:
     """
     对解析后的结构化信息进行补全：
-    - 如果工作经历缺公司、职位，尝试从项目经历或教育经历推测
-    - 技能字段补全大小写统一
-    返回补全后的结构化字典
+    - 工作经历、教育经历、项目经历补全缺失字段
+    - 技能字段统一标准化
     """
     for cat, fields in CATEGORY_FIELDS.items():
         new_entries = []
@@ -101,7 +100,7 @@ def auto_fill_fields(structured_resume: dict) -> dict:
                     if f not in entry or entry[f] is None:
                         if f == "skills":
                             entry[f] = []
-                        elif f == "start_date":
+                        elif f in ["start_date", "grad_date"]:
                             entry[f] = "Unknown"
                         elif f == "end_date":
                             entry[f] = "Present"
@@ -109,7 +108,7 @@ def auto_fill_fields(structured_resume: dict) -> dict:
                             entry[f] = "N/A"
                 new_entries.append(entry)
             else:
-                # 万一仍然是非法类型，转为 description dict
+                # 非法类型，统一转为 description dict
                 entry_dict = {f: None for f in fields}
                 if "description" in fields:
                     entry_dict["description"] = str(entry)
@@ -117,7 +116,7 @@ def auto_fill_fields(structured_resume: dict) -> dict:
                     if entry_dict[f] is None:
                         if f == "skills":
                             entry_dict[f] = []
-                        elif f == "start_date":
+                        elif f in ["start_date", "grad_date"]:
                             entry_dict[f] = "Unknown"
                         elif f == "end_date":
                             entry_dict[f] = "Present"
@@ -126,9 +125,8 @@ def auto_fill_fields(structured_resume: dict) -> dict:
                 new_entries.append(entry_dict)
         structured_resume[cat] = new_entries
 
-    # 最后处理整体技能字段（保证为字符串列表并标准化）
+    # 技能标准化
     if "skills" in structured_resume:
-        # 只保留字符串
         structured_resume["skills"] = [s for s in structured_resume["skills"] if isinstance(s, str)]
         structured_resume["skills"] = normalize_skills(structured_resume["skills"])
 

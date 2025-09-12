@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import logging
 import re
-from utils import CATEGORY_FIELDS, normalize_category, normalize_skills , auto_fill_fields, extract_basic_info
+from utils import CATEGORY_FIELDS, normalize_category, normalize_skills , auto_fill_fields, SKILL_NORMALIZATION
 from ner import run_ner_batch
 from utils_parser import semantic_fallback
 
@@ -14,6 +14,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+# -------------------------
+# classify_paragraphs
+# -------------------------
 def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_cat=None):
     para_clean = paragraph.strip().replace("\r", " ").replace("\n", " ")
     if not para_clean:
@@ -22,6 +26,7 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
     para_lower = para_clean.lower()
 
     # ---- 基础信息 ----
+    from utils import extract_basic_info
     info = extract_basic_info(para_clean)
     if info:
         structured["email"] = structured.get("email") or info.get("email")
@@ -41,9 +46,13 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
             d["skills"] = []
         return d
 
-    category = None
+    # ---- 判断类别 ----
     edu_keywords = ["university", "college", "学院", "大学", "bachelor", "master", "phd", "ma", "ms", "mba"]
     work_keywords = ["intern", "engineer", "manager", "responsible", "工作", "实习", "任职", "developer", "consultant"]
+    proj_keywords = ["project", "built", "created", "developed", "led", "designed", "implemented"]
+
+    category = None
+    data = init_data_for_category("other", para_clean)
 
     if any(k in para_lower for k in edu_keywords):
         category = "education"
@@ -55,7 +64,7 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
         for p in parts:
             year_match = re.search(r"\b(19|20)\d{2}\b", p)
             if year_match:
-                data["grad_date"] = data["grad_date"] or year_match.group()
+                data["grad_date"] = year_match.group()
     elif any(k in para_lower for k in work_keywords):
         category = "work_experience"
         data = init_data_for_category(category, para_clean)
@@ -68,9 +77,23 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
             if date_match:
                 data["start_date"] = date_match.group(1)
                 data["end_date"] = date_match.group(2)
+    elif any(k in para_lower for k in proj_keywords):
+        category = "projects"
+        data = init_data_for_category(category, para_clean)
+        # 尝试抽取标题
+        title_match = re.match(r"^(.*?)[:\-]", para_clean)
+        if title_match:
+            data["project_title"] = title_match.group(1).strip()
+        # 尝试抽取日期
+        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*–\s*(Present|\d{4})", para_clean, re.I)
+        if date_match:
+            data["start_date"] = date_match.group(1)
+            data["end_date"] = date_match.group(2)
+        # 内容
+        data["project_content"] = para_clean
     else:
-        category = None
-        data = init_data_for_category("other", para_clean)
+        category = "other"
+        data = init_data_for_category(category, para_clean)
 
     # ---- 使用批量 NER 结果 ----
     if ner_results:
@@ -96,7 +119,8 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
                     elif "end_date" in data and not data["end_date"]:
                         data["end_date"] = val
         except Exception as e:
-            logger.warning(f"[NER ERROR] {e}")
+            import logging
+            logging.warning(f"[NER ERROR] {e}")
 
     # ---- 技能关键词补全 ----
     skill_keywords = [
@@ -107,12 +131,7 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
     if "skills" in data:
         for kw in skill_keywords:
             if kw in para_lower and kw not in data["skills"]:
-                data["skills"].append(kw.upper() if kw in ["sql","llm","aws","hugging"] else kw.capitalize())
-
-    # ---- fallback 使用批量结果 ----
-    if not category:
-        category = normalize_category(sem_cat or "other")
-        data = init_data_for_category(category, para_clean)
+                data["skills"].append(SKILL_NORMALIZATION.get(kw, kw.upper() if kw in ["sql","llm","aws","hugging"] else kw.capitalize()))
 
     return normalize_category(category), data
 

@@ -142,8 +142,23 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
 
     # ---- 项目经历 ----
     for para in query_results.get("项目经历", []):
-        entry = {"description": para}
+        entry = {
+            "project_title": None,
+            "start_date": "Unknown",
+            "end_date": "Present",
+            "project_content": para
+        }
+        # 尝试提取标题
+        title_match = re.match(r"^(.*?)[:\-]", para)
+        if title_match:
+            entry["project_title"] = title_match.group(1).strip()
+        # 尝试提取日期
+        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*[-–]\s*(Present|\d{4})", para, re.I)
+        if date_match:
+            entry["start_date"] = date_match.group(1)
+            entry["end_date"] = date_match.group(2)
         new_structured["projects"].append(entry)
+
 
     # ---- 技能 ----
     for para in query_results.get("技能", []):
