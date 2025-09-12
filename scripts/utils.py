@@ -137,24 +137,52 @@ def auto_fill_fields(structured_resume: dict) -> dict:
 email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
 
+# utils.py
 def extract_basic_info(text: str) -> dict:
     result = {}
+    lines = text.split("\n")
+    print("DEBUG: total lines =", len(lines))
+    print("DEBUG: first 10 lines:", lines[:10])
+
     # 提取 email
-    email_match = re.search(email_pattern, text)
+    email_match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
     if email_match:
         result["email"] = email_match.group()
+    print("DEBUG: email_match =", result.get("email"))
+
     # 提取电话
-    phone_match = re.search(phone_pattern, text)
+    phone_match = re.search(r"(\+?\d[\d\s\-\(\)]{7,20})", text)
     if phone_match:
-        phone_clean = re.sub(r"[\s\(\)]", "", phone_match.group())
-        result["phone"] = phone_clean
-    # 兜底提取名字（假设首行或 email 上方）
-    if "email" in result:
-        first_line = text.split("\n")[0].strip()
-        if first_line and not re.search(email_pattern, first_line):
-            name_match = re.match(r"([A-Z][a-z]+(?:\s[A-Z][a-z]+)+)", first_line)
-            if name_match:
-                result["name"] = name_match.group(1)
+        result["phone"] = re.sub(r"[\s\(\)]", "", phone_match.group())
+    print("DEBUG: phone_match =", result.get("phone"))
+
+    # 尝试提取名字：优先 email 上方最近一行
+    email_line_idx = None
+    if email_match:
+        email_line_idx = next((i for i, l in enumerate(lines) if email_match.group() in l), None)
+    print("DEBUG: email_line_idx =", email_line_idx)
+
+    if email_line_idx is not None:
+        for i in range(email_line_idx - 1, -1, -1):
+            line = lines[i].strip()
+            if line:
+                name_match = re.match(r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)", line)
+                if name_match:
+                    result["name"] = name_match.group(1)
+                    print("DEBUG: name found above email =", result["name"])
+                    break
+
+    if "name" not in result:
+        for line in lines:
+            line = line.strip()
+            if line:
+                name_match = re.match(r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)", line)
+                if name_match:
+                    result["name"] = name_match.group(1)
+                    print("DEBUG: name found in first non-empty line =", result["name"])
+                    break
+
+    print("DEBUG: final extracted info =", result)
     return result
 
 # -------------------------
