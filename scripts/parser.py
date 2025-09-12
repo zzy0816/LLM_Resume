@@ -278,6 +278,18 @@ def parse_resume_to_structured(paragraphs: list, file_name: str = None):
             structured["skills"].extend(extracted)
             continue
 
+        # ---- NER 补充 ----
+        if ner_results:
+            try:
+                for ent in ner_results:
+                    label = ent["entity_group"].lower()
+                    val = ent["word"].strip()
+                    if label == "per" and structured.get("name") is None:
+                        structured["name"] = val
+                    # 其他字段同原逻辑
+            except Exception as e:
+                logging.warning(f"[NER ERROR] {e}")
+
         # ---- 其他 ----
         structured["other"].append({"description": para_clean})
 
