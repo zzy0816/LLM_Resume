@@ -14,6 +14,98 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def parse_projects_blocks(raw_lines: list[str]) -> list[dict]:
+    """
+    将原始文本行拆分为项目块（title + content）
+    - 标题行：不以动词开头，长度小于100
+    - 内容行：以 '-' 开头或动词开头的描述
+    """
+    projects = []
+    current_title = None
+    current_content = []
+
+    action_verbs = ("built", "created", "used", "collected", "led", "fine-tuned", "developed")
+
+    for line in raw_lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # 新标题行条件：不以动作动词开头，长度<100
+        if not line.lower().startswith(action_verbs) and len(line) <= 100:
+            # 保存前一个项目
+            if current_title:
+                projects.append({
+                    "project_title": current_title,
+                    "project_content": "\n".join(current_content)
+                })
+            current_title = line
+            current_content = []
+        else:
+            current_content.append(line)
+
+    # 保存最后一个项目
+    if current_title:
+        projects.append({
+            "project_title": current_title,
+            "project_content": "\n".join(current_content)
+        })
+
+    return projects
+
+# -------------------------
+# preprocess_paragraphs_for_projects
+# -------------------------
+def preprocess_paragraphs_for_projects(paragraphs: list[str]) -> list[str]:
+    """
+    将连续的项目段落合并，生成按项目拆分的段落列表
+    - 项目标题：长度<=100 且不以动作动词开头，或包含 'project' / '项目'
+    - 内容行：以 '-' 开头或动作动词开头
+    """
+    merged_paragraphs = []
+    ACTION_VERBS = ("built", "created", "used", "collected", "led", "fine-tuned", "developed")
+
+    skip_next = 0
+    for i, para in enumerate(paragraphs):
+        if skip_next:
+            skip_next -= 1
+            continue
+
+        para_clean = para.strip()
+        if not para_clean:
+            continue
+
+        para_lower = para_clean.lower()
+        # 判断是否为项目段落起始
+        is_project_start = ("project" in para_lower) or ("项目" in para_lower) or \
+                           (len(para_clean) <= 100 and not para_lower.startswith(ACTION_VERBS))
+
+        if is_project_start:
+            project_lines = [para_clean]
+            j = i + 1
+            while j < len(paragraphs):
+                next_para = paragraphs[j].strip()
+                if not next_para:
+                    j += 1
+                    continue
+                next_lower = next_para.lower()
+                # 遇到非项目段落或教育/工作标题就停止
+                if any(k in next_lower for k in ["university","college","bachelor","master","phd",
+                                                 "intern","engineer","manager","工作","实习","任职"]):
+                    break
+                project_lines.append(next_para)
+                j += 1
+
+            # 使用 parse_projects_blocks 生成项目块
+            projects_blocks = parse_projects_blocks(project_lines)
+            for blk in projects_blocks:
+                merged_paragraphs.append(blk["project_title"] + "\n" + blk["project_content"])
+
+            skip_next = len(project_lines) - 1
+        else:
+            merged_paragraphs.append(para_clean)
+
+    return merged_paragraphs
 
 # -------------------------
 # classify_paragraphs
@@ -165,6 +257,7 @@ def parse_resume_to_structured(paragraphs: list, file_name: str = None):
         "other": []
     }
 
+    paragraphs = preprocess_paragraphs_for_projects(paragraphs)
     ner_results_batch = run_ner_batch(paragraphs)
     semantic_cats = semantic_fallback(paragraphs, file_name=file_name)
 
@@ -242,29 +335,31 @@ def parse_resume_to_structured(paragraphs: list, file_name: str = None):
             structured["work_experience"].append(current_work)
 
         # ---- 独立项目经历 ----
-        project_keywords = ["project", "built", "developed", "created", "项目"]
-        if any(k in para_lower for k in project_keywords):
-            # 如果有当前工作经历，把它当作工作任务
-            if current_work:
-                current_work["description"] += "\n- " + para_clean
-            else:
-                # 独立项目
-                entry = {
-                    "project_title": None,
-                    "start_date": "Unknown",
-                    "end_date": "Present",
-                    "project_content": para_clean
-                }
-                # 尝试解析项目标题 (冒号或首句)
-                if ":" in para_clean:
-                    entry["project_title"] = para_clean.split(":", 1)[0].strip()
-                else:
-                    entry["project_title"] = para_clean.split()[0].strip()
-                # 尝试解析年份
-                year_match = re.search(r"\b(19|20)\d{2}\b", para_clean)
-                if year_match:
-                    entry["start_date"] = year_match.group()
-                structured["projects"].append(entry)
+        project_keywords = ["project", "项目"]
+
+        if any(k in para_lower for k in project_keywords) or sem_cat == "project":
+            # 收集所有连续项目段落
+            project_lines = [para_clean]
+            idx = paragraphs.index(para) + 1
+            while idx < len(paragraphs):
+                next_para = paragraphs[idx].strip()
+                if not next_para:
+                    idx += 1
+                    continue
+                # 遇到非项目段落或技能/工作/教育则停止
+                next_lower = next_para.lower()
+                if any(k in next_lower for k in ["university","college","bachelor","master","phd","intern","engineer","manager","工作","实习","任职"]):
+                    break
+                project_lines.append(next_para)
+                idx += 1
+
+            # 使用 parse_projects_blocks 生成项目块
+            projects_blocks = parse_projects_blocks(project_lines)
+            structured["projects"].extend(projects_blocks)
+
+            # 跳过已经收集的段落
+            for _ in range(len(project_lines) - 1):
+                next(paragraphs, None)
             continue
 
         # ---- 技能 ----

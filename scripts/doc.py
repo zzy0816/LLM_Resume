@@ -49,31 +49,60 @@ def read_pdf_paragraphs(pdf_path: str):
                 paragraphs.extend(page_paras)
     logger.info("PDF split into %d paragraphs", len(paragraphs))
     return paragraphs
+
 # -------------------------
 # FAISS 分段（增强教育段落保留短文本）
 # -------------------------
+ACTION_VERBS = ("built", "created", "used", "collected", "led", "fine-tuned", "developed", "designed", "implemented")
+
 def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
     """
-    将文本按句拆分为子块，用于 FAISS 插入
-    - 对短段落（< max_size）保留
-    - 支持中文句号和英文逗号分句
+    改造版 semantic_split，专门处理项目标题 + 描述格式：
+    - 项目标题：不以动作动词开头，长度<100，或者包含 'project'
+    - 描述行：以 '-' 开头或动词开头
+    - 遇到新标题就拆分
     """
-    sentences = re.split(r"[。,.]", text.replace("\n"," "))
-    sentences = [s.strip() for s in sentences if s.strip()]
-    sub_chunks = []
-    current = ""
-    for s in sentences:
-        if len(current) + len(s) + 1 <= max_size:
-            current += s + "。"
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    chunks = []
+    curr_chunk = []
+
+    for line in lines:
+        line_lower = line.lower()
+        # 判断是否为新项目标题
+        is_title = (len(line) <= 100 and not line_lower.startswith(ACTION_VERBS)) or "project" in line_lower
+
+        if is_title and curr_chunk:
+            chunks.append("\n".join(curr_chunk))
+            curr_chunk = [line]
         else:
-            if current.strip(): 
-                sub_chunks.append(current.strip())
-            current = s + "。"
-    if current.strip(): 
-        sub_chunks.append(current.strip())
-    # 保留短段落，避免教育信息丢失
-    sub_chunks = [sc for sc in sub_chunks if len(sc) > 5]
-    return sub_chunks
+            curr_chunk.append(line)
+
+    if curr_chunk:
+        chunks.append("\n".join(curr_chunk))
+
+    # 对大段落再按 max_size 拆
+    final_chunks = []
+    for c in chunks:
+        if len(c) <= max_size:
+            final_chunks.append(c)
+        else:
+            # 大段落继续按句拆
+            sentences = re.split(r"[。,.]", c)
+            current = ""
+            for s in sentences:
+                s = s.strip()
+                if not s:
+                    continue
+                if len(current) + len(s) + 1 <= max_size:
+                    current += s + "。"
+                else:
+                    if current.strip():
+                        final_chunks.append(current.strip())
+                    current = s + "。"
+            if current.strip():
+                final_chunks.append(current.strip())
+
+    return final_chunks
 
 # -------------------------
 # 文本归一化与相似度判断（用来去重）

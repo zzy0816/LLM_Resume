@@ -15,18 +15,18 @@ logger = logging.getLogger(__name__)
 # -------------------------
 # 查询接口
 # -------------------------
-def detect_query_category(query:str):
+def detect_query_category(query: str):
     """
-    分类归一化
+    分类归一化，只根据 query 判断类别
     """
     query_lower = query.lower()
-    if any(k in query_lower for k in ["work","experience","career","job","employment","工作经历"]):
+    if any(k in query_lower for k in ["work", "experience", "career", "job", "employment", "工作经历"]):
         return "work_experience"
-    elif any(k in query_lower for k in ["project","built","developed","created","项目"]):
+    elif any(k in query_lower for k in ["project", "projects", "项目经历", "项目"]):
         return "projects"
-    elif any(k in query_lower for k in ["education","degree","university","school","bachelor","master","教育"]):
+    elif any(k in query_lower for k in ["education", "degree", "university", "school", "bachelor", "master", "教育"]):
         return "education"
-    elif any(k in query_lower for k in ["skill","skills","python","tensorflow","ml","pytorch","sql","技能"]):
+    elif any(k in query_lower for k in ["skill", "skills", "python", "tensorflow", "ml", "pytorch", "sql", "技能"]):
         return "skills"
     else:
         return None
@@ -157,27 +157,24 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
 
     # ---- 独立项目 ----
     for para in query_results.get("项目经历", []):
-        # 按换行拆分，每行去掉首尾空格
         lines = [l.strip() for l in para.split("\n") if l.strip()]
         if not lines:
             continue
 
-        # 第一行为标题，其余为内容
-        title = lines[0]
-        content = "\n".join(lines[1:]) if len(lines) > 1 else lines[0]
+        # 规则改动：第一行如果不以动词开头，作为标题
+        if re.match(r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()):
+            title = ""
+            content = "\n".join(lines)
+        else:
+            title = lines[0]
+            content = "\n".join(lines[1:])
 
         entry = {
-            "project_title": title,
+            "project_title": title if title else content[:60],  # 没标题用前60字符
             "start_date": "Unknown",
             "end_date": "Present",
             "project_content": content
         }
-
-        # 尝试解析年份作为开始日期
-        year_match = re.search(r"\b(19|20)\d{2}\b", para)
-        if year_match:
-            entry["start_date"] = year_match.group()
-
         new_structured["projects"].append(entry)
 
     # ---- 技能 ----
