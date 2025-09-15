@@ -38,7 +38,7 @@
    [读取文件内容]
           │
           ▼
-   [LongChain/LLM 分析]
+   [NER 模型 分析]
           │
           ▼
       [返回结果给用户]
@@ -47,21 +47,34 @@
 
 ## 项目目录结构
 LLM_Resume_Project/
-├── README.md
+├── readme.md
 ├── .env
 ├── requirements.txt
-├── main.py                 # 使用LLM查询简历的所有分类
 ├── frontend.py             # streamlit 了一个简单的前端
 ├── minio_data/             # 本地 MinIO 数据挂载目录
 ├── data/                   # 本地测试简历文件存放目录
+    ├── classified 各个文件的json缓存
+    ├── faiss 各个文件的faiss缓存
+    ├── Resume(AI).docx
+    ├── Resume(AI).pdf
+    └── Resume(DS)v0.1.docx
 ├── downloads/              # 储存从MINIO下载到本地的文件
-│   ├── Resume(AI).docx
-│   └── Resume(DS)v0.1.docx
-└── scripts/                # 可选辅助脚本目录
-    ├── upload_langchain_nollm.py # 不使用LLM,只用sentence_transform模型分段
-    ├── upload_llm.py # 使用LLM分类,单独查询一个分类
-    ├── upload_llm_v0.py # upload_llm.py 的初始版,保留防止意外
-    └── storage_client.py     # 上传和下载简历（可用 boto3）
+    ├── Resume(AI).docx
+    └── Resume(DS)v0.1.docx
+└── scripts/               
+    ├── upload_llm.py       # 原脚本, t0,t1同为原脚本
+    ├── db.py               # mongodb上传
+    ├── doc.py              # 读取 doc/pdf 文件, faiss分段, 去重/归一化
+    ├── files.py            # 加载读取 json, embed, faiss 文件
+    ├── ner.py              # 加载ner模型
+    ├── parser.py           # 分类和结构化
+    ├── query.py            # 查询分类段落和覆盖结构化json
+    ├── semantic.py         # build_faiss 生成faiss的
+    ├── utils_parser.py     # 因为semantic_fallback涉及其他模块,放utils会造成循环调用,故隔离开
+    ├── utils.py            # 各种不涉及其他模块的辅助工具
+    ├── pipline.py          # 总流程
+    ├── main.py             # 使用fastAPI后台脚本
+    └── storage_client.py   # 上传和下载简历（可用 boto3）
 
 ---
 
@@ -131,86 +144,118 @@ MINIO_BUCKET=resume-bucket
 ## 示例运行
 main.py 或 strealit run frontend.py
 
-{
-    "message": "简历分析完成",
-    "report": {
-        "WorkExperience": [
-            {
-                "company": "New York Technology & Management LLC",
-                "title": "Programming Manager",
-                "start_date": "2025",
-                "end_date": "Present",
-                "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。"
-            },
-            {
-                "company": "Yangtze River Consulting Service LLC",
-                "title": "Ethical Consultant",
-                "start_date": "Unknown",
-                "end_date": "Unknown",
-                "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023。"
-            }
-        ],
-        "Project": [
-            {
-                "description": "Created a token counter in Ollama to efficiently track and manage token usage.。"
-            },
-            {
-                "description": "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.。"
-            },
-            {
-                "description": "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.。"
-            },
-            {
-                "description": "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.。"
-            },
-            {
-                "description": "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.。"
-            },
-            {
-                "description": "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.。"
-            },
-            {
-                "description": "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.。"
-            },
-            {
-                "description": "Built a QA system with Transformer, improving automated question answering accuracy.。"
-            },
-            {
-                "description": "Collected Bitfinex API data, trained transformer model with historical data, added vector database.。"
-            },
-            {
-                "description": "Using metal model to stack transformer model and sentiment model to get 84% accuracy.。"
-            }
-        ],
-        "Education": [
-            {
-                "school": "Northeastern University",
-                "degree": "Master of Professional Study in Applied Machine Intelligence",
-                "grad_date": "2025",
-                "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0。"
-            },
-            {
-                "school": "University of Connecticut",
-                "degree": "Bachelor of Art",
-                "grad_date": "N/A",
-                "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills。"
-            }
-        ],
-        "Skills": [
-            "Hugging face",
-            "Langchain",
-            "Numpy",
-            "Ollama",
-            "Pandas",
-            "Python",
-            "Pytorch",
-            "SQL",
-            "Scikit-learn",
-            "Seaborn",
-            "Tableau",
-            "Tensorflow"
-        ]
+===== FINAL STRUCTURED RESUME JSON for Zhang.zhenyu6@northeastern.edu =====
+2025-09-14 12:26:16,296 [INFO] {
+  "name": null,
+  "email": "Zhang.zhenyu6@northeastern.edu",
+  "phone": "+1860234-7101",
+  "education": [
+    {
+      "school": "Northeastern University",
+      "degree": "Master of Professional Study in Applied Machine Intelligence",
+      "grad_date": "April 2025",
+      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0。"
+    },
+    {
+      "school": "University of Connecticut",
+      "degree": "Bachelor of Art",
+      "grad_date": "May 2022",
+      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills。"
     }
+  ],
+  "work_experience": [
+    {
+      "company": "New York Technology & Management LLC",
+      "title": "Programming Manager",
+      "start_date": "May 2025",
+      "end_date": "Present",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。"
+    },
+    {
+      "company": "Yangtze River Consulting Service LLC",
+      "title": "Ethical Consultant",
+      "start_date": "Sep 2022",
+      "end_date": "Jul 2023",
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023。"
+    }
+  ],
+  "projects": [
+    {
+      "project_title": "Created a token counter in Ollama to efficiently track and m",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Created a token counter in Ollama to efficiently track and manage token usage.。"
+    },
+    {
+      "project_title": "Fine-tuned and quantized Hugging Face model on custom data f",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.。"
+    },
+    {
+      "project_title": "Built Ollama-based chatbot with memory, vector DB(FAISS), wi",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.。"
+    },
+    {
+      "project_title": "Used Ollama to analyze files and generate PowerPoint reports",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.。"
+    },
+    {
+      "project_title": "Built and deployed app for NGO to auto-publish messages via ",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.。"
+    },
+    {
+      "project_title": "Built flower AI assistant to answer inquiries, boosting onli",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.。"
+    },
+    {
+      "project_title": "Led COVID-19 time series and survey data analysis, focusing ",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.。"
+    },
+    {
+      "project_title": "Built a QA system with Transformer, improving automated ques",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Built a QA system with Transformer, improving automated question answering accuracy.。"
+    },
+    {
+      "project_title": "Collected Bitfinex API data, trained transformer model with ",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "Collected Bitfinex API data, trained transformer model with historical data, added vector database.。"
+    },
+    {
+      "project_title": "Using metal model to stack transformer model and sentiment model to get 84% accuracy.。",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": ""
+    }
+  ],
+  "skills": [
+    "HuggingFace",
+    "LangChain",
+    "NumPy",
+    "Ollama",
+    "Pandas",
+    "PyTorch",
+    "Python",
+    "SQL",
+    "Scikit-learn",
+    "Seaborn",
+    "Tableau",
+    "TensorFlow"
+  ],
+  "other": []
 }
 ---
 
@@ -248,3 +293,16 @@ main.py 或 strealit run frontend.py
     - 2. NER模型抽取: 使用 yashpwr/resume-ner-bert-v2等做parsing, 解析成结构化字典, 使用语义回退 fallback, 去空+分类+对技能段落规范化+去重, 自动补全缺失字段,  返回最终结构化字典, 根据段落列表构建 FAISS 向量数据库并保存, 根据查询语义动态匹配分类, 根据 query 精准返回相关字段内容
     - 3. 总流程: 1. 加载或解析简历(看data是否有classified), 2. 构建或加载 FAISS(看是否有faiss), 3. 查询 FAISS 并生成 query_results (NER模型解析抽取), 4. 使用 query 结果填充结构化 JSON (完成数据格式化), # 5. 保存最终 JSON 到 faiss文件夹
 
+# week 3
+1. 拆分原upload_llm.py为doc, files, ner, parser, semantic, query, pipline, utils, 和 utils_parser多个模块. 拆分后代码不会太长, 同时按功能划分, 便于维护. 就是问题涉及多个模块时,难以确定问题所在. 
+2. 优化:
+    - 1. 在files添加save/load_embed, 可以缓存embeddings, 批量推理实现
+    - 2. 在 doc 添加 read_pdf_paragraphs, 可以使用pdfplumber 支持PDF输入 直接处理PDF
+    - 2. 1. 目前直接解析PDF文件效果不好,分类都是乱的, 同时, ner中的truncation也有问题, 即便是docx文件,删除data中的classified和faiss缓存, 运行pipline会报错不支持truncation为true, 删除truncation后,解析的分类就会变乱和PDF一样
+    - 3. 添加db, 引入MONGODB数据库, 储存解析好的结构化JSON, pipline修改支持批量上传
+    - 4. JSON字段命名不一致是main里写前台report是标题写错了
+    - 5. eductio和workexperience部分的日期问题已修复, 在query和parser添加更多正则,可以正确输出月+年, 
+    - 6. project已添加更多结构化
+    - 6. 1. 目前分段过细, 按行分段, 标题之类太短被舍弃, 所以无法识别出 project的模块和project下的两个项目小模块. 尝试修改doc的semantic split, semantic的build faiss, 以及parser和query里的分类和结构化部分, 都是无效, 还是无法识别出项目标题    
+    - 7. 在 utils增加SKILL_NORMALIZATION技能词典, 用于统一大小写和拼写格式
+    - 8. 名字null问题 经测试发现utils的extract_basic_info可以抓取名字,但是修改parser和query的主要函数的基本信息抓取部分都无效,最终结构化json的名字还是null

@@ -111,6 +111,14 @@ def preprocess_paragraphs_for_projects(paragraphs: list[str]) -> list[str]:
 # classify_paragraphs
 # -------------------------
 def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_cat=None):
+    """
+    对单个简历段落进行分类与结构化处理。
+    - 清洗段落文本（去掉换行符、回车等）。
+    - 判断段落是否属于基础信息、教育经历、工作经历、项目经历或其他类别。
+    - 结合关键字、正则表达式和 NER 识别结果，提取邮箱、电话、姓名、公司、职位、学校、学位、日期等字段。
+    - 检测技能关键词并归一化到 skills 列表。
+    - 返回类别与对应的数据字典。
+    """
     para_clean = paragraph.strip().replace("\r", " ").replace("\n", " ")
     if not para_clean:
         return "other", {}
@@ -246,6 +254,16 @@ def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_
 # parse_resume_to_structured
 # -------------------------
 def parse_resume_to_structured(paragraphs: list, file_name: str = None):
+    """
+    将完整简历的段落列表解析为结构化的 JSON 格式。
+    - 预处理段落（如项目合并预处理）。
+    - 批量执行 NER，获取实体识别结果。
+    - 调用语义分类（semantic_fallback）作为辅助判断。
+    - 遍历段落，按类别分别解析
+    - 使用 NER 结果对缺失字段进行补充。
+    - 对技能字段去重与标准化。
+    - 自动填充缺失字段（auto_fill_fields）。
+    """
     structured = {
         "name": None,
         "email": None,

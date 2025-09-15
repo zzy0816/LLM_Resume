@@ -57,10 +57,10 @@ def analyze_resume(req: ResumeRequest):
     reports = {}
     for user_email, structured_resume in all_results.items():
         reports[user_email] = {
-            "WorkExperience": structured_resume.get("work_experience", []),
-            "Project": structured_resume.get("projects", []),
-            "Education": structured_resume.get("education", []),
-            "Skills": structured_resume.get("skills", [])
+            "work_experience": structured_resume.get("work_experience", []),
+            "projects": structured_resume.get("projects", []),
+            "education": structured_resume.get("education", []),
+            "skills": structured_resume.get("skills", [])
         }
 
     return {"message": "简历分析完成", "reports": reports}

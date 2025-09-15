@@ -12,3 +12,4 @@ pypdf
 python-docx
 ollama
 streamlit
+pymongo
