@@ -8,13 +8,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from utils import (
     CATEGORY_FIELDS,
-    normalize_category,
-    normalize_skills,
-    auto_fill_fields,
-    extract_basic_info,
-    extract_skills_from_text
+    extract_basic_info
 )
-from ner import run_ner_batch
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -148,7 +143,10 @@ def classify_paragraph(paragraph: str, structured: dict, ner_results=None):
 # -------------------------
 # 完整解析
 # -------------------------
-def parse_resume_to_structured(paragraphs: List[str]):
+# -------------------------
+# 完整解析（改进版）
+# -------------------------
+def parse_resume_to_structured(paragraphs: list[str]) -> dict:
     structured = {
         "name": None,
         "email": None,
@@ -164,23 +162,18 @@ def parse_resume_to_structured(paragraphs: List[str]):
         para_clean = para.strip()
         if not para_clean:
             continue
-
         para_lower = para_clean.lower()
 
         # ---- 基础信息 ----
         if not structured["name"] and re.match(r"^[A-Z][a-z]+(\s[A-Z][a-z]+)*$", para_clean):
-            # 只匹配类似 "Zhenyu Zhang" 这种格式的人名
             structured["name"] = para_clean.strip()
-
         if not structured["email"] and "@" in para_clean:
             email_match = re.search(r"[\w\.-]+@[\w\.-]+", para_clean)
             if email_match:
                 structured["email"] = email_match.group(0)
-
         if not structured["phone"] and re.search(r"\+?\d[\d\s\-()]{6,}", para_clean):
             phone_match = re.search(r"\+?\d[\d\s\-()]{6,}", para_clean)
             structured["phone"] = phone_match.group(0)
-
 
         # ---- 教育经历 ----
         if any(k in para_lower for k in ["university", "college", "school", "bachelor", "master", "phd"]):
@@ -195,26 +188,30 @@ def parse_resume_to_structured(paragraphs: List[str]):
             continue
 
         # ---- 工作经历 ----
-        if any(kw in para_lower for kw in ["llc", "inc", "company", "intern", "engineer", "analyst"]):
+        if "|" in para_clean and any(kw in para_lower for kw in ["llc", "inc", "company", "intern", "engineer", "analyst", "manager", "consultant"]):
             parts = [p.strip() for p in para_clean.split("|")]
+            start_end = parts[2] if len(parts) > 2 else "Unknown–Present"
+            start, end = start_end.split("–") if "–" in start_end else (start_end, "Present")
             work_entry = {
                 "company": parts[1] if len(parts) > 1 else "",
                 "position": parts[0] if len(parts) > 0 else "",
-                "start_date": parts[2].split("–")[0].strip() if len(parts) > 2 and "–" in parts[2] else "Unknown",
-                "end_date": parts[2].split("–")[-1].strip() if len(parts) > 2 and "–" in parts[2] else "Present",
+                "start_date": start.strip(),
+                "end_date": end.strip(),
                 "description": para_clean
             }
+            logger.info(f"Detected work_experience: {para_clean}")
             structured["work_experience"].append(work_entry)
             continue
 
         # ---- 项目经历 ----
-        if any(kw in para_lower for kw in ["project", "built", "developed", "created", "implemented", "designed"]):
+        elif re.search(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", para_clean, re.I):
             proj_entry = {
                 "project_title": para_clean.split("|")[0][:50],
                 "project_content": para_clean,
                 "start_date": "Unknown",
                 "end_date": "Present"
             }
+            logger.info(f"Detected project: {para_clean}")
             structured["projects"].append(proj_entry)
             continue
 
@@ -231,6 +228,7 @@ def parse_resume_to_structured(paragraphs: List[str]):
     # 去重技能
     structured["skills"] = sorted(set(structured["skills"]))
     return structured
+
 
 # -------------------------
 # 测试
