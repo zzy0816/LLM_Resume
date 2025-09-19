@@ -168,6 +168,10 @@ def parse_resume_to_structured(paragraphs: List[str]):
         para_lower = para_clean.lower()
 
         # ---- 基础信息 ----
+        if not structured["name"] and re.match(r"^[A-Z][a-z]+(\s[A-Z][a-z]+)*$", para_clean):
+            # 只匹配类似 "Zhenyu Zhang" 这种格式的人名
+            structured["name"] = para_clean.strip()
+
         if not structured["email"] and "@" in para_clean:
             email_match = re.search(r"[\w\.-]+@[\w\.-]+", para_clean)
             if email_match:
@@ -177,8 +181,6 @@ def parse_resume_to_structured(paragraphs: List[str]):
             phone_match = re.search(r"\+?\d[\d\s\-()]{6,}", para_clean)
             structured["phone"] = phone_match.group(0)
 
-        if not structured["name"] and "|" in para_clean and "@" in para_clean:
-            structured["name"] = para_clean.split("|")[0].strip()
 
         # ---- 教育经历 ----
         if any(k in para_lower for k in ["university", "college", "school", "bachelor", "master", "phd"]):
@@ -235,7 +237,8 @@ def parse_resume_to_structured(paragraphs: List[str]):
 # -------------------------
 if __name__ == "__main__":
     test_paragraphs = [
-        "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101",
+        "Zhenyu Zhang",
+        "Phone: +1 (860) 234-7101 | Email: Zhang.zhenyu6@northeastern.edu | Linkedin Profile | GithubCareer Goal",
         "Northeastern University | Master of Professional Study in Applied Machine Intelligence | 2025",
         "University of Connecticut | Bachelor of Art | 2022",
         "Data Science Intern | Google LLC | Jun 2024 – Aug 2024",

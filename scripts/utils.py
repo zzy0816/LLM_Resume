@@ -150,45 +150,19 @@ phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
 
 # utils.py
 def extract_basic_info(text: str) -> dict:
-    result = {}
-    lines = text.split("\n")
+    result = {"name": None, "email": None, "phone": None}
 
-    # 提取 email
-    email_match = re.search(email_pattern, text)
+    # 只提取 email
+    email_match = re.search(r"[\w\.-]+@[\w\.-]+", text)
     if email_match:
-        result["email"] = email_match.group()
+        result["email"] = email_match.group(0)
 
-    # 提取电话
-    phone_match = re.search(phone_pattern, text)
+    # 只提取 phone
+    phone_match = re.search(r"\+?\d[\d\s\-()]{6,}", text)
     if phone_match:
-        result["phone"] = re.sub(r"[\s\(\)]", "", phone_match.group())
+        result["phone"] = phone_match.group(0)
 
-    # 尝试提取名字
-    name_candidate = None
-
-    # 优先从 email 所在行
-    if email_match:
-        for line in lines:
-            if email_match.group() in line:
-                # 提取 email 前的文本作为名字
-                parts = line.split("|")
-                for p in parts:
-                    p = p.strip()
-                    if p and p != result.get("email") and p != result.get("phone"):
-                        name_candidate = p
-                        break
-                if name_candidate:
-                    break
-
-    # fallback: 第一行，如果还没找到
-    if not name_candidate:
-        first_line = lines[0].strip()
-        if first_line:
-            name_candidate = first_line.split("|")[0].strip()
-
-    if name_candidate:
-        result["name"] = name_candidate
-
+    # 不处理 name，留给 parser.py 单独判断
     return result
 
 # -------------------------

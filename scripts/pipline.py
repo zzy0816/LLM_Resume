@@ -44,7 +44,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
             logger.info(f"DEBUG: basic_info extracted: {basic_info}")
 
             structured_resume = {
-                "name": basic_info.get("name"),
+                "name": None,   # 让 parser 来决定
                 "email": basic_info.get("email"),
                 "phone": basic_info.get("phone"),
                 "basic_info": basic_info,
@@ -55,8 +55,14 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
                 "other": []
             }
 
-            # 解析简历
+            # 用 parser 结果覆盖
             parsed_resume = parse_resume_to_structured(paragraphs)
+
+            if parsed_resume.get("name"):  
+                structured_resume["name"] = parsed_resume["name"]
+
+
+            # 解析简历
             if parsed_resume is None:
                 logger.warning(f"parse_resume_to_structured returned None for {file_name}, using empty structured_resume")
                 parsed_resume = {}
