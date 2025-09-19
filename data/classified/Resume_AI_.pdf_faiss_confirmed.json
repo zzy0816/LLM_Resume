@@ -1,0 +1,95 @@
+{
+  "name": "Zhenyu Zhang",
+  "email": "Zhang.zhenyu6@northeastern.edu",
+  "phone": "+1 (860) 234-7101 ",
+  "education": [
+    {
+      "school": "Northeastern University",
+      "degree": "Master of Professional Study in Applied Machine Intelligence",
+      "grad_date": "Unknown",
+      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston,"
+    },
+    {
+      "school": "University of Connecticut",
+      "degree": "Bachelor of Art",
+      "grad_date": "May 2022",
+      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022"
+    }
+  ],
+  "work_experience": [
+    {
+      "company": "New York Technology & Management LLC",
+      "title": "Programming Manager",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 –"
+    },
+    {
+      "company": "Yangtze River Consulting Service LLC",
+      "title": "Ethical Consultant",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul"
+    }
+  ],
+  "projects": [
+    {
+      "project_title": "- Built Ollama-based chatbot with memory, vector D",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask."
+    },
+    {
+      "project_title": "- Built and deployed app for NGO to auto-publish m",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%."
+    },
+    {
+      "project_title": "- Built flower AI assistant to answer inquiries, b",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built flower AI assistant to answer inquiries, boosting online sales and reducing workload."
+    },
+    {
+      "project_title": "- Built a QA system with Transformer, improving au",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built a QA system with Transformer, improving automated question answering accuracy."
+    },
+    {
+      "project_title": "- Built multi-agent system for sales and after-sal",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built multi-agent system for sales and after-sales, streamlining communication and task flow."
+    },
+    {
+      "project_title": "- Built React agent with LangChain tool-calling to",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built React agent with LangChain tool-calling to automate internal tool, reducing manual work."
+    },
+    {
+      "project_title": "- Built a LangChain agent to automate Gmail email",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built a LangChain agent to automate Gmail email tracking and improve communication."
+    },
+    {
+      "project_title": "- Built a Crypto analysis tool with transformer mo",
+      "start_date": "Unknown",
+      "end_date": "Present",
+      "project_content": "- Built a Crypto analysis tool with transformer model and LLM for Realtime market prediction."
+    }
+  ],
+  "skills": [
+    "LangChain",
+    "NumPy",
+    "Pandas",
+    "PyTorch",
+    "Scikit-learn",
+    "Seaborn",
+    "TensorFlow"
+  ],
+  "other": []
+}
