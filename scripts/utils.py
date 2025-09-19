@@ -4,9 +4,9 @@ import re
 # 分类段落
 # -------------------------
 CATEGORY_FIELDS = {
-    "work_experience": ["title","company","start_date","end_date","description"],
+    "work_experience": ["title","company","start_date","end_date","description", "Professional Experience", "Industry Experience", "Experience"],
     "education": ["school","degree","grad_date","description"],
-    "projects": ["project_title","start_date","end_date","project_content"],
+    "projects": ["project_title","start_date","end_date","project_content", "Projects", "Project Experience"],
     "skills": ["skills"],
     "other": ["description"]
 }
@@ -16,20 +16,32 @@ CATEGORY_FIELDS = {
 # -------------------------
 def normalize_category(cat: str) -> str:
     mapping = {
+        # ---- 工作经历 ----
         "work": "work_experience",
         "workexperience": "work_experience",
         "work_experience": "work_experience",
+        "professionalexperience": "work_experience",
+        "industryexperience": "work_experience",
+        "experience": "work_experience",
+
+        # ---- 项目经历 ----
         "projects": "projects",
         "project": "projects",
+        "projectexperience": "projects",
+
+        # ---- 教育 ----
         "education": "education",
         "edu": "education",
+
+        # ---- 技能 ----
         "skills": "skills",
         "skill": "skills",
+
+        # ---- 其他 ----
         "other": "other"
     }
     key = cat.lower().replace(" ", "").replace("_", "")
     return mapping.get(key, "other")
-
 
 # -------------------------
 # 技能标准化词典
@@ -50,86 +62,85 @@ SKILL_NORMALIZATION = {
 }
 
 def normalize_skills(skills: list) -> list:
-    skills_set = set()
+    """安全技能标准化"""
+    result = set()
     for s in skills:
         if not isinstance(s, str):
             continue
         s_clean = s.strip()
         if not s_clean:
             continue
-
         s_lower = s_clean.lower()
-
-        # 如果在标准化词典里，直接替换
-        if s_lower in SKILL_NORMALIZATION:
-            skills_set.add(SKILL_NORMALIZATION[s_lower])
-            continue
-
-        # 否则做基本规则化
-        if s_clean.isupper():
-            skills_set.add(s_clean)
+        if s_lower in SKILL_NORMALIZATION and SKILL_NORMALIZATION[s_lower]:
+            result.add(SKILL_NORMALIZATION[s_lower])
         else:
-            skills_set.add(s_clean.capitalize())
+            result.add(s_clean)
+    return sorted(result)
 
-    return sorted(list(skills_set))
+import logging
 
-# -------------------------
-# 自动补全工作/教育/项目字段
-# -------------------------
 def auto_fill_fields(structured_resume: dict) -> dict:
-    """
-    对解析后的结构化信息进行补全：
-    - 工作经历、教育经历、项目经历补全缺失字段
-    - 技能字段统一标准化
-    """
-    for cat, fields in CATEGORY_FIELDS.items():
-        new_entries = []
-        for entry in structured_resume.get(cat, []):
-            # 如果 entry 是字符串，则包装为 dict
-            if isinstance(entry, str):
-                entry_dict = {f: None for f in fields}
-                if "description" in fields:
-                    entry_dict["description"] = entry
-                if "skills" in fields:
-                    entry_dict["skills"] = []
-                entry = entry_dict
-            # 如果 entry 是 dict，就确保包含所有字段
-            if isinstance(entry, dict):
-                for f in fields:
-                    if f not in entry or entry[f] is None:
-                        if f == "skills":
-                            entry[f] = []
-                        elif f in ["start_date", "grad_date"]:
-                            entry[f] = "Unknown"
-                        elif f == "end_date":
-                            entry[f] = "Present"
-                        else:
-                            entry[f] = "N/A"
-                new_entries.append(entry)
-            else:
-                # 非法类型，统一转为 description dict
-                entry_dict = {f: None for f in fields}
-                if "description" in fields:
-                    entry_dict["description"] = str(entry)
-                for f in fields:
-                    if entry_dict[f] is None:
-                        if f == "skills":
-                            entry_dict[f] = []
-                        elif f in ["start_date", "grad_date"]:
-                            entry_dict[f] = "Unknown"
-                        elif f == "end_date":
-                            entry_dict[f] = "Present"
-                        else:
-                            entry_dict[f] = "N/A"
-                new_entries.append(entry_dict)
-        structured_resume[cat] = new_entries
+    """自动补全字段 & 技能（安全处理，不覆盖顶层 skills）"""
+    logging.basicConfig(level=logging.DEBUG)
 
-    # 技能标准化
-    if "skills" in structured_resume:
-        structured_resume["skills"] = [s for s in structured_resume["skills"] if isinstance(s, str)]
-        structured_resume["skills"] = normalize_skills(structured_resume["skills"])
+    # 只处理条目列表，不处理顶层 skills
+    CATEGORIES_TO_FILL = ["education", "work_experience", "projects", "other"]
+
+    for cat in CATEGORIES_TO_FILL:
+        fields = CATEGORY_FIELDS.get(cat, [])
+        entries = structured_resume.get(cat, [])
+        logging.debug(f"Processing category: {cat} with fields: {fields}")
+        new_entries = []
+
+        for i, entry in enumerate(entries):
+            logging.debug(f"Processing entry {i}: {entry} (type={type(entry)})")
+
+            # 字符串包装为 dict
+            if isinstance(entry, str):
+                entry = {f: None for f in fields}
+                if "description" in fields:
+                    entry["description"] = entry
+                if "skills" in fields:
+                    entry["skills"] = []
+            elif not isinstance(entry, dict):
+                # 非法类型
+                entry = {f: None for f in fields}
+                if "description" in fields:
+                    entry["description"] = str(entry)
+                if "skills" in fields:
+                    entry["skills"] = []
+
+            # 补全字段
+            for f in fields:
+                if f not in entry or entry[f] is None:
+                    if f == "skills":
+                        entry[f] = entry.get("skills") or []
+                    elif f in ["start_date", "grad_date"]:
+                        entry[f] = "Unknown"
+                    elif f == "end_date":
+                        entry[f] = "Present"
+                    else:
+                        entry[f] = "N/A"
+
+            # 条目内部技能标准化
+            if "skills" in entry and isinstance(entry["skills"], list):
+                entry["skills"] = normalize_skills([s for s in entry["skills"] if isinstance(s, str) and s.strip()])
+
+            logging.debug(f"Completed entry: {entry}")
+            new_entries.append(entry)
+
+        structured_resume[cat] = new_entries
+        logging.debug(f"After processing category {cat}: {structured_resume[cat]}")
+
+    # 顶层技能标准化（仅标准化，不覆盖原有列表）
+    if "skills" in structured_resume and isinstance(structured_resume["skills"], list):
+        top_skills = [s for s in structured_resume["skills"] if isinstance(s, str) and s.strip()]
+        logging.debug(f"Top-level skills before normalize: {top_skills}")
+        structured_resume["skills"] = normalize_skills(top_skills)
+        logging.debug(f"Top-level skills after normalize: {structured_resume['skills']}")
 
     return structured_resume
+
 
 # -------------------------
 # 正则兜底
@@ -141,48 +152,43 @@ phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
 def extract_basic_info(text: str) -> dict:
     result = {}
     lines = text.split("\n")
-    print("DEBUG: total lines =", len(lines))
-    print("DEBUG: first 10 lines:", lines[:10])
 
     # 提取 email
-    email_match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", text)
+    email_match = re.search(email_pattern, text)
     if email_match:
         result["email"] = email_match.group()
-    print("DEBUG: email_match =", result.get("email"))
 
     # 提取电话
-    phone_match = re.search(r"(\+?\d[\d\s\-\(\)]{7,20})", text)
+    phone_match = re.search(phone_pattern, text)
     if phone_match:
         result["phone"] = re.sub(r"[\s\(\)]", "", phone_match.group())
-    print("DEBUG: phone_match =", result.get("phone"))
 
-    # 尝试提取名字：优先 email 上方最近一行
-    email_line_idx = None
+    # 尝试提取名字
+    name_candidate = None
+
+    # 优先从 email 所在行
     if email_match:
-        email_line_idx = next((i for i, l in enumerate(lines) if email_match.group() in l), None)
-    print("DEBUG: email_line_idx =", email_line_idx)
-
-    if email_line_idx is not None:
-        for i in range(email_line_idx - 1, -1, -1):
-            line = lines[i].strip()
-            if line:
-                name_match = re.match(r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)", line)
-                if name_match:
-                    result["name"] = name_match.group(1)
-                    print("DEBUG: name found above email =", result["name"])
-                    break
-
-    if "name" not in result:
         for line in lines:
-            line = line.strip()
-            if line:
-                name_match = re.match(r"([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)*)", line)
-                if name_match:
-                    result["name"] = name_match.group(1)
-                    print("DEBUG: name found in first non-empty line =", result["name"])
+            if email_match.group() in line:
+                # 提取 email 前的文本作为名字
+                parts = line.split("|")
+                for p in parts:
+                    p = p.strip()
+                    if p and p != result.get("email") and p != result.get("phone"):
+                        name_candidate = p
+                        break
+                if name_candidate:
                     break
 
-    print("DEBUG: final extracted info =", result)
+    # fallback: 第一行，如果还没找到
+    if not name_candidate:
+        first_line = lines[0].strip()
+        if first_line:
+            name_candidate = first_line.split("|")[0].strip()
+
+    if name_candidate:
+        result["name"] = name_candidate
+
     return result
 
 # -------------------------
@@ -211,3 +217,110 @@ def extract_skills_from_text(text: str) -> list:
         if p:
             skills.append(p)
     return skills
+
+import re
+
+def rule_based_filter(category: str, candidates: list[str]) -> list[str]:
+    """
+    对 FAISS 检索到的候选段落做二次过滤，避免噪声进入
+    """
+    keywords = {
+        "教育经历": ["university", "college", "school", "gpa", "bachelor", "master", "phd", "degree", "教育", "学院", "大学"],
+        "工作经历": ["company", "inc", "llc", "engineer", "analyst", "intern", "experience", "工作", "实习", "任职"],
+        "项目经历": ["project", "built", "developed", "designed", "implemented", "system", "tool", "项目"],
+        "技能": ["python", "sql", "tensorflow", "pytorch", "keras", "docker", "kubernetes",
+                 "aws", "gcp", "azure", "spark", "hadoop", "tableau", "powerbi",
+                 "sklearn", "scikit-learn", "pandas", "numpy", "seaborn", "langchain"]
+    }
+    result = []
+    for c in candidates:
+        c_low = c.lower()
+        if any(k in c_low for k in keywords.get(category, [])):
+            result.append(c)
+    return result
+
+
+def validate_and_clean(structured: dict) -> dict:
+    """
+    对最终 structured_resume 做清理，避免分类错误
+    """
+    cleaned = structured.copy()
+
+    # 教育经历过滤：必须包含大学/学院关键词
+    edu_valid = []
+    for edu in cleaned.get("education", []):
+        text = (edu.get("school") or "") + " " + (edu.get("description") or "")
+        if re.search(r"(university|college|学院|大学)", text, re.I):
+            edu_valid.append(edu)
+    cleaned["education"] = edu_valid
+
+    # 工作经历过滤：必须包含 company/engineer/intern/工作 等关键词
+    work_valid = []
+    for work in cleaned.get("work_experience", []):
+        text = (work.get("company") or "") + " " + (work.get("description") or "")
+        if re.search(r"(company|engineer|intern|analyst|工作|实习|任职)", text, re.I):
+            work_valid.append(work)
+    cleaned["work_experience"] = work_valid
+
+    # 项目经历过滤：必须包含 project/项目
+    proj_valid = []
+    for proj in cleaned.get("projects", []):
+        text = (proj.get("project_title") or "") + " " + (proj.get("project_content") or "")
+        if re.search(r"(project|项目)", text, re.I):
+            proj_valid.append(proj)
+    cleaned["projects"] = proj_valid
+
+    # 技能去重 + 白名单
+    skill_whitelist = set([
+        "python","sql","pandas","numpy","scikit-learn","sklearn","tensorflow",
+        "pytorch","keras","docker","kubernetes","aws","gcp","azure",
+        "spark","hadoop","tableau","powerbi","llm","huggingface","langchain",
+        "seaborn"
+    ])
+    skills = cleaned.get("skills", [])
+    skills = [s.strip() for s in skills if s and s.lower() in skill_whitelist]
+    cleaned["skills"] = sorted(set(skills), key=lambda x: skills.index(x))
+
+    return cleaned
+
+# utils.py 中新增
+def merge_dicts(d1: dict, d2: dict) -> dict:
+    """
+    深度合并两个字典。
+    - 如果 key 对应值都是 dict，则递归合并
+    - 如果 key 对应值都是 list，则合并去重
+    - 其他类型，使用 d2 覆盖 d1
+    """
+    import copy
+    result = copy.deepcopy(d1)
+
+    for key, value in d2.items():
+        if key in result:
+            if isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = merge_dicts(result[key], value)
+            elif isinstance(result[key], list) and isinstance(value, list):
+                # 合并去重
+                result[key] = list({*result[key], *value})
+            else:
+                result[key] = value
+        else:
+            result[key] = value
+    return result
+
+# -----------------------
+# 测试 auto_fill_fields
+# -----------------------
+if __name__ == "__main__":
+    test_resume = {
+        "name": "Zhenyu Zhang",
+        "email": "Zhang.zhenyu6@northeastern.edu",
+        "phone": "+1860234-7101",
+        "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
+        "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
+        "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
+        "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
+        "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
+    }
+
+    filled_resume = auto_fill_fields(test_resume)
+    print("\nFinal structured resume:\n", filled_resume)

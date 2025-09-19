@@ -1,269 +1,154 @@
 import sys
 import os
+import re
+import logging
+from typing import List
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-import logging
-import re
-from utils import CATEGORY_FIELDS, normalize_category, normalize_skills, auto_fill_fields, SKILL_NORMALIZATION, extract_basic_info, extract_skills_from_text
+from utils import (
+    CATEGORY_FIELDS,
+    normalize_category,
+    normalize_skills,
+    auto_fill_fields,
+    extract_basic_info,
+    extract_skills_from_text
+)
 from ner import run_ner_batch
-from utils_parser import semantic_fallback
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-def parse_projects_blocks(raw_lines: list[str]) -> list[dict]:
-    """
-    将原始文本行拆分为项目块（title + content）
-    - 标题行：不以动词开头，长度小于100
-    - 内容行：以 '-' 开头或动词开头的描述
-    """
-    projects = []
-    current_title = None
-    current_content = []
-
-    action_verbs = ("built", "created", "used", "collected", "led", "fine-tuned", "developed")
-
-    for line in raw_lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        # 新标题行条件：不以动作动词开头，长度<100
-        if not line.lower().startswith(action_verbs) and len(line) <= 100:
-            # 保存前一个项目
-            if current_title:
-                projects.append({
-                    "project_title": current_title,
-                    "project_content": "\n".join(current_content)
-                })
-            current_title = line
-            current_content = []
-        else:
-            current_content.append(line)
-
-    # 保存最后一个项目
-    if current_title:
-        projects.append({
-            "project_title": current_title,
-            "project_content": "\n".join(current_content)
-        })
-
-    return projects
+logger.setLevel(logging.DEBUG)
 
 # -------------------------
-# preprocess_paragraphs_for_projects
+# 预处理段落，保持 Skills 行独立
 # -------------------------
-def preprocess_paragraphs_for_projects(paragraphs: list[str]) -> list[str]:
-    """
-    将连续的项目段落合并，生成按项目拆分的段落列表
-    - 项目标题：长度<=100 且不以动作动词开头，或包含 'project' / '项目'
-    - 内容行：以 '-' 开头或动作动词开头
-    """
-    merged_paragraphs = []
-    ACTION_VERBS = ("built", "created", "used", "collected", "led", "fine-tuned", "developed")
-
-    skip_next = 0
-    for i, para in enumerate(paragraphs):
-        if skip_next:
-            skip_next -= 1
-            continue
-
+def preprocess_paragraphs(paragraphs: List[str]) -> List[str]:
+    merged = []
+    buffer = []
+    for para in paragraphs:
         para_clean = para.strip()
         if not para_clean:
             continue
-
-        para_lower = para_clean.lower()
-        # 判断是否为项目段落起始
-        is_project_start = ("project" in para_lower) or ("项目" in para_lower) or \
-                           (len(para_clean) <= 100 and not para_lower.startswith(ACTION_VERBS))
-
-        if is_project_start:
-            project_lines = [para_clean]
-            j = i + 1
-            while j < len(paragraphs):
-                next_para = paragraphs[j].strip()
-                if not next_para:
-                    j += 1
-                    continue
-                next_lower = next_para.lower()
-                # 遇到非项目段落或教育/工作标题就停止
-                if any(k in next_lower for k in ["university","college","bachelor","master","phd",
-                                                 "intern","engineer","manager","工作","实习","任职"]):
-                    break
-                project_lines.append(next_para)
-                j += 1
-
-            # 使用 parse_projects_blocks 生成项目块
-            projects_blocks = parse_projects_blocks(project_lines)
-            for blk in projects_blocks:
-                merged_paragraphs.append(blk["project_title"] + "\n" + blk["project_content"])
-
-            skip_next = len(project_lines) - 1
+        if "project" in para_clean.lower() or "项目" in para_clean:
+            if buffer:
+                merged.extend(buffer)
+                buffer = []
+            merged.append(para_clean)
+        elif para_clean.lower().startswith("skills:"):
+            if buffer:
+                merged.extend(buffer)
+                buffer = []
+            merged.append(para_clean)
         else:
-            merged_paragraphs.append(para_clean)
-
-    return merged_paragraphs
+            buffer.append(para_clean)
+    if buffer:
+        merged.extend(buffer)
+    logger.debug(f"Preprocessed paragraphs: {merged}")
+    return merged
 
 # -------------------------
-# classify_paragraphs
+# 分类段落
 # -------------------------
-def classify_paragraphs(paragraph: str, structured: dict, ner_results=None, sem_cat=None):
-    """
-    对单个简历段落进行分类与结构化处理。
-    - 清洗段落文本（去掉换行符、回车等）。
-    - 判断段落是否属于基础信息、教育经历、工作经历、项目经历或其他类别。
-    - 结合关键字、正则表达式和 NER 识别结果，提取邮箱、电话、姓名、公司、职位、学校、学位、日期等字段。
-    - 检测技能关键词并归一化到 skills 列表。
-    - 返回类别与对应的数据字典。
-    """
-    para_clean = paragraph.strip().replace("\r", " ").replace("\n", " ")
-    if not para_clean:
-        return "other", {}
-
+def classify_paragraph(paragraph: str, structured: dict, ner_results=None):
+    para_clean = paragraph.strip()
     para_lower = para_clean.lower()
 
     # ---- 基础信息 ----
-    from utils import extract_basic_info
     info = extract_basic_info(para_clean)
     if info:
+        structured["name"] = structured.get("name") or info.get("name")
         structured["email"] = structured.get("email") or info.get("email")
         structured["phone"] = structured.get("phone") or info.get("phone")
-        return "basic_info", {}
 
-    if any(k in para_lower for k in ["linkedin", "github", "电话", "邮箱"]):
-        return "basic_info", {}
-
-    # ---- 初始化 data ----
-    def init_data_for_category(cat, text):
+    def init_data(cat):
         fields = CATEGORY_FIELDS.get(cat, ["description"])
         d = {f: None for f in fields}
         if "description" in fields:
-            d["description"] = text
+            d["description"] = para_clean
         if "skills" in fields:
             d["skills"] = []
         return d
 
-    # ---- 判断类别 ----
-    edu_keywords = ["university", "college", "学院", "大学", "bachelor", "master", "phd", "ma", "ms", "mba"]
-    work_keywords = ["intern", "engineer", "manager", "responsible", "工作", "实习", "任职", "developer", "consultant"]
-    proj_keywords = ["project", "built", "created", "developed", "led", "designed", "implemented"]
-
-    category = None
-    data = init_data_for_category("other", para_clean)
-
-    if any(k in para_lower for k in edu_keywords):
-        category = "education"
-        data = init_data_for_category(category, para_clean)
-        parts = [p.strip() for p in para_clean.split("|")]
-        if len(parts) >= 2:
-            data["school"] = parts[0]
-            data["degree"] = parts[1]
-
-        date_pattern = re.compile(
-            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-            r"(\d{4})",
-            re.I
+    # ---- 工作经历 ----
+    # 工作经历一般有 title | company | start–end
+    if "email" not in para_lower and "phone" not in para_lower:
+        work_match = re.match(
+            r"(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)(?:–|-|to)(.*)", para_clean, re.I
         )
-        match = date_pattern.search(para_clean)
-        if match:
-            month, year = match.groups()
-            data["grad_date"] = f"{month} {year}" if month else year
-    elif any(k in para_lower for k in proj_keywords):
+        if work_match:
+            title, company, start, end = work_match.groups()
+            category = "work_experience"
+            data = init_data(category)
+            data["title"] = (title or "").strip()
+            data["company"] = (company or "").strip()
+            data["start_date"] = (start or "").strip()
+            data["end_date"] = (end or "").strip()
+            return category, data
+
+    # ---- 教育经历 ----
+    # 教育经历必须包含学位关键字或学校关键字
+    if any(k in para_clean.lower() for k in ["university", "college", "school", "bachelor", "master", "phd"]):
+        edu_match = re.match(r"(.*?)\s*\|\s*(.*?)\s*\|?\s*(\d{4})?", para_clean)
+        if edu_match:
+            school, degree, year = edu_match.groups()
+            category = "education"
+            data = init_data(category)
+            data["school"] = (school or "").strip()
+            data["degree"] = (degree or "").strip()
+            if year:
+                data["grad_date"] = year.strip()
+            return category, data
+
+    # ---- 项目经历 ----
+    if re.search(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", para_clean, re.I):
         category = "projects"
-        data = init_data_for_category(category, para_clean)
-        # 尝试抽取标题
-        title_match = re.match(r"^(.*?)[:\-]", para_clean)
-        if title_match:
-            data["project_title"] = title_match.group(1).strip()
-        # 尝试抽取日期
-        date_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|\d{4})\s*–\s*(Present|\d{4})", para_clean, re.I)
-        if date_match:
-            data["start_date"] = date_match.group(1)
-            data["end_date"] = date_match.group(2)
-        # 内容
-        data["project_content"] = para_clean
-    elif any(k in para_lower for k in work_keywords):
-        category = "work_experience"
-        data = init_data_for_category(category, para_clean)
-        parts = [p.strip() for p in para_clean.split("|")]
-        if len(parts) >= 2:
-            data["company"] = parts[0]
-            data["title"] = parts[1]
-
-        # 使用统一正则解析日期
-        date_pattern = re.compile(
-            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-            r"(\d{4})\s*[-–]\s*"
-            r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-            r"(Present|\d{4})",
-            re.I
+        data = init_data(category)
+        title_match = re.match(
+            r"(.*?)\s*(Built|Created|Developed|Led|Designed|Implemented)", para_clean, re.I
         )
-        match = date_pattern.search(para_clean)
-        if match:
-            start_month, start_year, end_month, end_year = match.groups()
-            data["start_date"] = f"{start_month} {start_year}" if start_month else start_year
-            data["end_date"] = f"{end_month} {end_year}" if end_month else end_year
-    else:
-        category = "other"
-        data = init_data_for_category(category, para_clean)
+        data["project_title"] = title_match.group(1).strip() if title_match else " ".join(para_clean.split()[:7])
+        data["project_content"] = para_clean
+        return category, data
 
-    # ---- 使用批量 NER 结果 ----
-    if ner_results:
-        try:
+    # ---- 技能 ----
+    if para_lower.startswith("skills:"):
+        category = "skills"
+        data = init_data(category)
+        skills_text = para_clean[len("skills:"):].strip()
+        skills_list = [s.strip() for s in re.split(r",|;", skills_text) if s.strip()]
+        data["skills"].extend(skills_list)
+        if ner_results:
             for ent in ner_results:
-                label = ent["entity_group"].lower()
-                val = ent["word"].strip()
-                if label == "per" and structured.get("name") is None:
-                    structured["name"] = val
-                elif label == "org" and "company" in data and not data["company"]:
-                    data["company"] = val
-                elif label == "title" and "title" in data and not data["title"]:
-                    data["title"] = val
-                elif label == "edu" and "school" in data and not data["school"]:
-                    data["school"] = val
-                elif label == "degree" and "degree" in data and not data["degree"]:
-                    data["degree"] = val
-                elif label == "skill" and "skills" in data and val not in data["skills"]:
+                if ent["entity_group"].lower() == "skill":
+                    val = ent["word"].strip()
+                    if val not in data["skills"]:
+                        data["skills"].append(val)
+        return category, data
+
+    # ---- NER 补充其他技能 ----
+    if ner_results:
+        data = init_data("other")
+        for ent in ner_results:
+            label = ent["entity_group"].lower()
+            val = ent["word"].strip()
+            if label == "skill" and "skills" in data:
+                if val not in data["skills"]:
                     data["skills"].append(val)
-                elif label == "date":
-                    if "start_date" in data and not data["start_date"]:
-                        data["start_date"] = val
-                    elif "end_date" in data and not data["end_date"]:
-                        data["end_date"] = val
-        except Exception as e:
-            import logging
-            logging.warning(f"[NER ERROR] {e}")
+        return "other", data
 
-    # ---- 技能关键词补全 ----
-    skill_keywords = [
-        "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
-        "pytorch","keras","docker","kubernetes","aws","gcp","azure",
-        "spark","hadoop","tableau","powerbi","llm","llama","hugging"
-    ]
-    if "skills" in data:
-        for kw in skill_keywords:
-            if kw in para_lower and kw not in data["skills"]:
-                data["skills"].append(SKILL_NORMALIZATION.get(kw, kw.upper() if kw in ["sql","llm","aws","hugging"] else kw.capitalize()))
-
-    return normalize_category(category), data
+    # 默认其他
+    category = "other"
+    data = init_data(category)
+    return category, data
 
 # -------------------------
-# parse_resume_to_structured
+# 完整解析
 # -------------------------
-def parse_resume_to_structured(paragraphs: list, file_name: str = None):
-    """
-    将完整简历的段落列表解析为结构化的 JSON 格式。
-    - 预处理段落（如项目合并预处理）。
-    - 批量执行 NER，获取实体识别结果。
-    - 调用语义分类（semantic_fallback）作为辅助判断。
-    - 遍历段落，按类别分别解析
-    - 使用 NER 结果对缺失字段进行补充。
-    - 对技能字段去重与标准化。
-    - 自动填充缺失字段（auto_fill_fields）。
-    """
+def parse_resume_to_structured(paragraphs: List[str]):
     structured = {
         "name": None,
         "email": None,
@@ -275,138 +160,88 @@ def parse_resume_to_structured(paragraphs: list, file_name: str = None):
         "other": []
     }
 
-    paragraphs = preprocess_paragraphs_for_projects(paragraphs)
-    ner_results_batch = run_ner_batch(paragraphs)
-    semantic_cats = semantic_fallback(paragraphs, file_name=file_name)
-
-    current_work = None
-    for para, ner_results, sem_cat in zip(paragraphs, ner_results_batch, semantic_cats):
-        para_clean = para.strip().replace("\r", " ").replace("\n", " ")
+    for para in paragraphs:
+        para_clean = para.strip()
         if not para_clean:
-            continue
-
-        # ---- 基础信息 ----
-        info = extract_basic_info(para_clean)
-        if info:
-            structured["email"] = structured.get("email") or info.get("email")
-            structured["phone"] = structured.get("phone") or info.get("phone")
-            structured["name"] = structured.get("name") or info.get("name")
-            continue
-        if any(k in para_clean.lower() for k in ["linkedin", "github", "电话", "邮箱"]):
             continue
 
         para_lower = para_clean.lower()
 
+        # ---- 基础信息 ----
+        if not structured["email"] and "@" in para_clean:
+            email_match = re.search(r"[\w\.-]+@[\w\.-]+", para_clean)
+            if email_match:
+                structured["email"] = email_match.group(0)
+
+        if not structured["phone"] and re.search(r"\+?\d[\d\s\-()]{6,}", para_clean):
+            phone_match = re.search(r"\+?\d[\d\s\-()]{6,}", para_clean)
+            structured["phone"] = phone_match.group(0)
+
+        if not structured["name"] and "|" in para_clean and "@" in para_clean:
+            structured["name"] = para_clean.split("|")[0].strip()
+
         # ---- 教育经历 ----
-        edu_keywords = ["university", "college", "学院", "大学", "bachelor", "master", "phd", "ma", "ms", "mba"]
-        if any(k in para_lower for k in edu_keywords):
+        if any(k in para_lower for k in ["university", "college", "school", "bachelor", "master", "phd"]):
             parts = [p.strip() for p in para_clean.split("|")]
-            entry = {
-                "school": parts[0] if len(parts) > 0 else "N/A",
-                "degree": parts[1] if len(parts) > 1 else "N/A",
-                "grad_date": "Unknown",
+            edu_entry = {
+                "school": parts[0] if len(parts) > 0 else "",
+                "degree": parts[1] if len(parts) > 1 else "",
+                "grad_date": parts[-1] if len(parts) > 2 else "Unknown",
                 "description": para_clean
             }
-
-            # 增强日期匹配：支持完整月份可选 + 年份
-            date_pattern = re.compile(
-                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-                r"(\d{4})",
-                re.I
-            )
-            match = date_pattern.search(para_clean)
-            if match:
-                month, year = match.groups()
-                entry["grad_date"] = f"{month} {year}" if month else year
-
-            structured["education"].append(entry)
+            structured["education"].append(edu_entry)
+            continue
 
         # ---- 工作经历 ----
-        work_keywords = ["intern", "engineer", "manager", "responsible", "工作", "实习", "任职", "developer", "consultant"]
-        if any(k in para_lower for k in work_keywords):
+        if any(kw in para_lower for kw in ["llc", "inc", "company", "intern", "engineer", "analyst"]):
             parts = [p.strip() for p in para_clean.split("|")]
-            current_work = {
-                "company": parts[0] if len(parts) > 0 else "N/A",
-                "title": parts[1] if len(parts) > 1 else "N/A",
-                "start_date": "Unknown",
-                "end_date": "Present",
+            work_entry = {
+                "company": parts[1] if len(parts) > 1 else "",
+                "position": parts[0] if len(parts) > 0 else "",
+                "start_date": parts[2].split("–")[0].strip() if len(parts) > 2 and "–" in parts[2] else "Unknown",
+                "end_date": parts[2].split("–")[-1].strip() if len(parts) > 2 and "–" in parts[2] else "Present",
                 "description": para_clean
             }
+            structured["work_experience"].append(work_entry)
+            continue
 
-            # 增强日期匹配：支持完整月份名或缩写 + 年份
-            date_pattern = re.compile(
-                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-                r"(\d{4})\s*[-–]\s*"
-                r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-                r"(Present|\d{4})",
-                re.I
-            )
-
-            match = date_pattern.search(para_clean)
-            if match:
-                start_month, start_year, end_month, end_year = match.groups()
-                start_date = f"{start_month} {start_year}" if start_month else start_year
-                end_date = f"{end_month} {end_year}" if end_month else end_year
-                current_work["start_date"] = start_date
-                current_work["end_date"] = end_date
-
-            structured["work_experience"].append(current_work)
-
-        # ---- 独立项目经历 ----
-        project_keywords = ["project", "项目"]
-
-        if any(k in para_lower for k in project_keywords) or sem_cat == "project":
-            # 收集所有连续项目段落
-            project_lines = [para_clean]
-            idx = paragraphs.index(para) + 1
-            while idx < len(paragraphs):
-                next_para = paragraphs[idx].strip()
-                if not next_para:
-                    idx += 1
-                    continue
-                # 遇到非项目段落或技能/工作/教育则停止
-                next_lower = next_para.lower()
-                if any(k in next_lower for k in ["university","college","bachelor","master","phd","intern","engineer","manager","工作","实习","任职"]):
-                    break
-                project_lines.append(next_para)
-                idx += 1
-
-            # 使用 parse_projects_blocks 生成项目块
-            projects_blocks = parse_projects_blocks(project_lines)
-            structured["projects"].extend(projects_blocks)
-
-            # 跳过已经收集的段落
-            for _ in range(len(project_lines) - 1):
-                next(paragraphs, None)
+        # ---- 项目经历 ----
+        if any(kw in para_lower for kw in ["project", "built", "developed", "created", "implemented", "designed"]):
+            proj_entry = {
+                "project_title": para_clean.split("|")[0][:50],
+                "project_content": para_clean,
+                "start_date": "Unknown",
+                "end_date": "Present"
+            }
+            structured["projects"].append(proj_entry)
             continue
 
         # ---- 技能 ----
-        skill_keywords = [
-            "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
-            "pytorch","keras","docker","kubernetes","aws","gcp","azure",
-            "spark","hadoop","tableau","powerbi","llm","llama","hugging"
-        ]
-        if any(k in para_lower for k in skill_keywords):
-            extracted = extract_skills_from_text(para_clean)
-            structured["skills"].extend(extracted)
+        if para_lower.startswith("skills") or para_lower.startswith("languages & tools"):
+            skills_text = para_clean.split(":", 1)[-1]
+            skills_list = [s.strip().lower() for s in re.split(r",|;", skills_text) if s.strip()]
+            structured["skills"].extend(skills_list)
             continue
 
-        # ---- NER 补充 ----
-        if ner_results:
-            try:
-                for ent in ner_results:
-                    label = ent["entity_group"].lower()
-                    val = ent["word"].strip()
-                    if label == "per" and structured.get("name") is None:
-                        structured["name"] = val
-                    # 其他字段同原逻辑
-            except Exception as e:
-                logging.warning(f"[NER ERROR] {e}")
-
-        # ---- 其他 ----
+        # ---- 兜底放 other ----
         structured["other"].append({"description": para_clean})
 
-    # 去重 & 标准化技能
-    structured["skills"] = normalize_skills(structured["skills"])
-    structured = auto_fill_fields(structured)
+    # 去重技能
+    structured["skills"] = sorted(set(structured["skills"]))
     return structured
+
+# -------------------------
+# 测试
+# -------------------------
+if __name__ == "__main__":
+    test_paragraphs = [
+        "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101",
+        "Northeastern University | Master of Professional Study in Applied Machine Intelligence | 2025",
+        "University of Connecticut | Bachelor of Art | 2022",
+        "Data Science Intern | Google LLC | Jun 2024 – Aug 2024",
+        "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...",
+        "Skills: Python, SQL, TensorFlow, PyTorch"
+    ]
+    result = parse_resume_to_structured(test_paragraphs)
+    import json
+    print(json.dumps(result, indent=2, ensure_ascii=False))

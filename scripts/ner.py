@@ -25,7 +25,7 @@ ner_pipeline = load_ner_pipeline()
 # -------------------------
 def run_ner_batch(paragraphs: list[str]) -> list[list[dict]]:
     """对段落列表做批量 NER，返回每段的实体结果"""
-    results = ner_pipeline(paragraphs, batch_size=8, truncation=True)
+    results = ner_pipeline(paragraphs, batch_size=8)
     # transformers pipeline 返回的可能是 flat list，需要按段落分组
     if isinstance(results[0], dict):
         return [results]  # 单段落
