@@ -16,8 +16,6 @@ ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b"
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
 COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
 
-
-
 def parse_resume_to_structured(paragraphs: List[str]) -> dict:
     paragraphs = preprocess_paragraphs(paragraphs)
 

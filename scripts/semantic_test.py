@@ -10,49 +10,64 @@ semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 def build_faiss(structured_resume: dict, embeddings_model=None):
     docs = []
+    user_email = structured_resume.get("email", "unknown")
+    logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {user_email}")
 
-    logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {structured_resume.get('email')}")
+    categories = ["work_experience", "projects", "education", "skills", "other"]
+    cat_map = {cat: cat for cat in categories}
 
-    for cat in ["work_experience", "projects", "education", "other"]:
+    for cat in categories:
         entries = structured_resume.get(cat, [])
         logger.info(f"[FAISS DEBUG] Processing category '{cat}' with {len(entries)} entries")
 
-        for i, entry in enumerate(entries):
-            meta_cat = normalize_category(cat)
-            logger.info(f"[FAISS DEBUG] Entry {i} raw content: {entry}")
+        if not entries:
+            continue
 
-            if isinstance(entry, dict):
-                if cat == "projects":
-                    # 尝试多种字段名
-                    text = (entry.get("project_title") or entry.get("title") or "") + "\n" + \
-                           (entry.get("project_content") or entry.get("highlights", "") or "")
-                    text = text.strip()
-                    if not text:
-                        logger.warning(f"[FAISS WARN] Empty project text for entry {i} in category '{cat}'")
-                        continue
-                    docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                    logger.info(f"[FAISS INSERT] cat={meta_cat}, text_preview={text[:80]}")
+        if cat == "skills" and isinstance(entries, list):
+            text = "\n".join([str(s).strip() for s in entries if s])
+            if text:
+                docs.append(LC_Document(page_content=text, metadata={"category": cat_map[cat]}))
+                logger.info(f"[FAISS INSERT] cat={cat_map[cat]}, snippet={text[:80]}")
+            continue
+
+        for i, entry in enumerate(entries):
+            meta_cat = cat_map[cat]
+            text = ""
+
+            if cat == "projects" and isinstance(entry, dict):
+                title_text = entry.get("project_title") or entry.get("title") or ""
+                title_text = title_text.strip()
+                highlights = entry.get("highlights", [])
+                highlights_text = "\n".join([h.strip() for h in highlights if h.strip()])
+
+                if title_text and highlights_text:
+                    text = title_text + "\n" + highlights_text
+                elif title_text:
+                    text = title_text
+                elif highlights_text:
+                    text = highlights_text
                 else:
-                    text_fields = []
-                    for key in ["description", "role", "company", "degree", "school"]:
-                        val = entry.get(key)
-                        if val and isinstance(val, str):
-                            text_fields.append(val.strip())
-                    text = "\n".join(text_fields)
-                    if not text:
-                        logger.warning(f"[FAISS WARN] Empty text for entry {i} in category '{cat}'")
-                        continue
-                    docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                    logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
+                    text = None
+
+            elif isinstance(entry, dict):
+                text_fields = []
+                for key in ["description", "role", "company", "degree", "school"]:
+                    val = entry.get(key)
+                    if val and isinstance(val, str):
+                        val = val.strip()
+                        if val:
+                            text_fields.append(val)
+                text = "\n".join(text_fields).strip() or None
+
             elif isinstance(entry, str):
-                text = entry.strip()
-                if not text:
-                    logger.warning(f"[FAISS WARN] Empty string entry {i} in category '{cat}'")
-                    continue
-                docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
-            else:
-                logger.warning(f"[FAISS WARN] Unknown entry type {type(entry)} for entry {i} in category '{cat}'")
+                text = entry.strip() or None
+
+            if not text:
+                text = f"[{meta_cat} 未提供内容]"
+                logger.warning(f"[FAISS WARN] Entry {i} in category '{cat}' is empty, using placeholder.")
+
+            docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
+            logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
 
     if not docs:
         logger.warning("[FAISS WARN] No docs generated, FAISS DB will be empty")

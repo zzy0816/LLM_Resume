@@ -7,7 +7,7 @@ import json
 from files import load_json, save_json, load_faiss, save_faiss
 from query_test import query_dynamic_category, fill_query_exact
 from utils import rule_based_filter, validate_and_clean
-from pip_t_0 import restore_parsed_structure
+from pipline_test import restore_parsed_structure
 from db import save_resume
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS

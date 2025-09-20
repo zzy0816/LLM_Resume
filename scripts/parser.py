@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import re
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List
 
 from utils import preprocess_paragraphs, extract_email, extract_phone, is_work_line, parse_education_line, parse_work_line, is_project_title
 
@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
 COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
-
-
 
 def parse_resume_to_structured(paragraphs: List[str]) -> dict:
     paragraphs = preprocess_paragraphs(paragraphs)
