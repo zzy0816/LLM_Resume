@@ -12,7 +12,7 @@ import textwrap
 
 # optional libs for layout / donut
 try:
-    import fitz  # PyMuPDF
+    import fitz  # type: ignore # PyMuPDF
 except Exception:
     fitz = None
 

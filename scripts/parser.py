@@ -1,8 +1,13 @@
-# parser_fixed.py
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import re
 import json
 import logging
 from typing import List, Optional, Tuple
+
+from utils import preprocess_paragraphs, extract_email, extract_phone, is_work_line, parse_education_line, parse_work_line, is_project_title
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -11,94 +16,7 @@ ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b"
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
 COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
 
-def preprocess_paragraphs(paragraphs: List[str]) -> List[str]:
-    out = []
-    for p in paragraphs:
-        if not p:
-            continue
-        text = " ".join(p.split())
-        # handle "...2022Skills" like cases
-        text = re.sub(r'(?<=\d)(?=Skills\b)', ' ', text, flags=re.I)
-        out.append(text)
-    logger.debug("Preprocessed paragraphs: %s", out[:12])
-    return out
 
-def extract_email(text: str) -> Optional[str]:
-    m = re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", text)
-    return m.group(0) if m else None
-
-def extract_phone(text: str) -> Optional[str]:
-    candidates = re.findall(r'(\+?\d[\d\-\s\(\)]{6,}\d)', text)
-    return max([c.strip() for c in candidates], key=len) if candidates else None
-
-def parse_date_range(date_str: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-    if not date_str:
-        return None, None
-    parts = re.split(r'\s*(?:–|-|—|to)\s*', date_str)
-    if len(parts) == 1:
-        yrs = re.findall(r'\b(19|20)\d{2}\b', date_str)
-        if yrs:
-            return yrs[0], yrs[-1] if len(yrs) > 1 else yrs[0]
-        return date_str.strip(), None
-    start = parts[0].strip() or None
-    end = parts[1].strip() or None
-    return start, end
-
-def is_project_title(text: str) -> bool:
-    if not text:
-        return False
-    low = text.lower()
-    if low in ("project", "projects", "项目", "project experience", "project:"):
-        return False
-    if "|" in text or "@" in text or re.search(r'\b(19|20)\d{2}\b', text):
-        return False
-    words = text.split()
-    alpha_words = [w for w in words if any(c.isalpha() for c in w)]
-    if not alpha_words:
-        return False
-    cap_count = sum(1 for w in alpha_words if w[0].isupper())
-    ratio = cap_count / len(alpha_words)
-    return ratio >= 0.6 and len(words) <= 8
-
-def is_work_line(text: str) -> bool:
-    if "|" not in text:
-        return False
-    parts = [p.strip() for p in text.split("|")]
-    if not parts:
-        return False
-    left = parts[0].lower()
-    right = parts[1].lower() if len(parts) > 1 else ""
-    has_pos = any(k in left for k in POSITION_KEYWORDS)
-    has_comp = any(k in right for k in COMPANY_KEYWORDS)
-    return has_pos or has_comp
-
-def parse_work_line(text: str):
-    parts = [p.strip() for p in text.split("|")]
-    position = parts[0] if parts else None
-    company = parts[1] if len(parts) > 1 else None
-    date_range = parts[2] if len(parts) > 2 else None
-    start, end = parse_date_range(date_range) if date_range else (None, None)
-    return {
-        "company": company,
-        "position": position,
-        "start_date": start,
-        "end_date": end,
-        "description": text,
-        "highlights": []
-    }
-
-def parse_education_line(text: str):
-    parts = [p.strip() for p in text.split("|")]
-    school = parts[0] if parts else text
-    degree = None
-    grad_date = None
-    for p in parts[1:]:
-        if any(word in p.lower() for word in ["bachelor", "master", "phd", "degree", "art", "science", "study"]):
-            degree = p
-        yr = re.search(r'\b(19|20)\d{2}\b', p)
-        if yr:
-            grad_date = yr.group(0)
-    return {"school": school, "degree": degree, "grad_date": grad_date, "description": text}
 
 def parse_resume_to_structured(paragraphs: List[str]) -> dict:
     paragraphs = preprocess_paragraphs(paragraphs)
@@ -241,9 +159,9 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
             continue
 
         # Skills 行（非 header 情况）
-        if re.match(r'(?i)skills\s*[:\-]', text) or re.match(r'(?i)languages\s*&\s*tools', text):
-            right = text.split(":", 1)[-1]
-            skills = [s.strip() for s in re.split(r',|;', right) if s.strip()]
+        if re.match(r'(?i)skills\s*[:\-]', text) or re.match(r'(?i)languages\s*&\s*tools', text) or "languages" in low:
+            right = text.split(":", 1)[-1] if ":" in text else text
+            skills = [s.strip() for s in re.split(r',|;|\n', right) if s.strip()]
             structured["skills"].extend(skills)
             current_section = "skills"
             logger.info("Detected skills: %s", skills)
