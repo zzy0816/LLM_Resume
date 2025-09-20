@@ -1,6 +1,7 @@
 import logging, json
 from files import load_faiss, save_faiss, save_json, load_json
 from doc import read_document_paragraphs
+from semantic_test import build_faiss
 from parser_test import parse_resume_to_structured
 from utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean
 from query import query_dynamic_category, fill_query_exact
@@ -15,33 +16,26 @@ from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from utils import normalize_category
 
+logger = logging.getLogger(__name__)
 semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 def build_faiss(structured_resume: dict, embeddings_model=None):
     docs = []
 
-    logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {structured_resume.get('email')}")
-
     for cat in ["work_experience", "projects", "education", "other"]:
-        entries = structured_resume.get(cat, [])
-        logger.info(f"[FAISS DEBUG] Processing category '{cat}' with {len(entries)} entries")
-
-        for i, entry in enumerate(entries):
+        for entry in structured_resume.get(cat, []):
             meta_cat = normalize_category(cat)
-            logger.info(f"[FAISS DEBUG] Entry {i} raw content: {entry}")
 
             if isinstance(entry, dict):
+                # 拼接文本
                 if cat == "projects":
-                    # 尝试多种字段名
-                    text = (entry.get("project_title") or entry.get("title") or "") + "\n" + \
-                           (entry.get("project_content") or entry.get("highlights", "") or "")
+                    text = (entry.get("project_title", "") or "") + "\n" + (entry.get("project_content", "") or "")
                     text = text.strip()
                     if not text:
-                        logger.warning(f"[FAISS WARN] Empty project text for entry {i} in category '{cat}'")
                         continue
                     docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                    logger.info(f"[FAISS INSERT] cat={meta_cat}, text_preview={text[:80]}")
-                else:
+                    logger.info("[FAISS INSERT] cat=%s, project_block=%s", meta_cat, text[:80])
+                else:  # work_experience / education / other
                     text_fields = []
                     for key in ["description", "role", "company", "degree", "school"]:
                         val = entry.get(key)
@@ -49,29 +43,25 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
                             text_fields.append(val.strip())
                     text = "\n".join(text_fields)
                     if not text:
-                        logger.warning(f"[FAISS WARN] Empty text for entry {i} in category '{cat}'")
                         continue
                     docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                    logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
+                    logger.info("[FAISS INSERT] cat=%s, snippet=%s", meta_cat, text[:80])
             elif isinstance(entry, str):
                 text = entry.strip()
                 if not text:
-                    logger.warning(f"[FAISS WARN] Empty string entry {i} in category '{cat}'")
                     continue
                 docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-                logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
-            else:
-                logger.warning(f"[FAISS WARN] Unknown entry type {type(entry)} for entry {i} in category '{cat}'")
+                logger.info("[FAISS INSERT] cat=%s, snippet=%s", meta_cat, text[:80])
 
     if not docs:
-        logger.warning("[FAISS WARN] No docs generated, FAISS DB will be empty")
+        logger.warning("[FAISS WARN] no docs to insert into FAISS (docs list empty)")
         return None
 
     if embeddings_model is None:
         embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     db = FAISS.from_documents(docs, embeddings_model)
-    logger.info(f"[FAISS INFO] FAISS database built with {len(docs)} docs")
+    logger.info("FAISS database built with %d docs", len(docs))
     return db
 
 def sanitize_filename(file_name: str) -> str:

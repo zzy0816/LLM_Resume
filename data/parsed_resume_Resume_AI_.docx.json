@@ -16,14 +16,14 @@
       "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022 Skills"
     }
   ],
-  "work_experience": [],
-  "projects": [
+  "work_experience": [
     {
-      "title": "Platforms & Tech: Ollama, Hugging Face",
-      "highlights": []
-    },
-    {
-      "title": "Built a QA system with Transformer, improving automated ques",
+      "company": "Yangtze River Consulting Service LLC",
+      "position": "Ethical Consultant",
+      "location": "Piscataway Township, NJ",
+      "start_date": "Sep 2022",
+      "end_date": "Jul 2023",
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023",
       "highlights": [
         "Built a QA system with Transformer, improving automated question answering accuracy.",
         "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.",
@@ -31,7 +31,12 @@
       ]
     },
     {
-      "title": "Built React agent with LangChain tool-calling to automate in",
+      "company": "New York Technology & Management LLC",
+      "position": "Programming Manager",
+      "location": "New York, NY",
+      "start_date": "May 2025",
+      "end_date": "Present",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present",
       "highlights": [
         "Built React agent with LangChain tool-calling to automate internal tool, reducing manual work.",
         "Created a token counter in Ollama to efficiently track and manage token usage.",
@@ -40,6 +45,12 @@
         "Built a LangChain agent to automate Gmail email tracking and improve communication.",
         "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference."
       ]
+    }
+  ],
+  "projects": [
+    {
+      "title": "Platforms & Tech: Ollama, Hugging Face",
+      "highlights": []
     },
     {
       "title": "Flower Market Assistant",
@@ -68,8 +79,6 @@
     "Tableau"
   ],
   "other": [
-    "Frameworks & Libraries: TensorFlow, Pytorch, Scikit-learn, Pandas, NumPy, Seaborn, Langchain",
-    "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023",
-    "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present"
+    "Frameworks & Libraries: TensorFlow, Pytorch, Scikit-learn, Pandas, NumPy, Seaborn, Langchain"
   ]
 }

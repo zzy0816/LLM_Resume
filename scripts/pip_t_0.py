@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
+# ------------------------
+# FAISS 构建
+# ------------------------
 def build_faiss(structured_resume: dict, embeddings_model=None):
     docs = []
     user_email = structured_resume.get("email", "unknown")
@@ -88,20 +91,93 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
     logger.info(f"[FAISS INFO] FAISS database built with {len(docs)} docs")
     return db
 
+# ------------------------
+# 文件名 sanitize
+# ------------------------
 def sanitize_filename(file_name: str) -> str:
     return file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
 
+# ------------------------
+# 恢复 fill_query_exact 结果的结构
+# ------------------------
+def restore_parsed_structure(structured_resume, original_resume):
+    """将 fill_query_exact 结果恢复为原解析结构"""
+    # work_experience
+    if "work_experience" in structured_resume:
+        restored = []
+        for i, item in enumerate(structured_resume["work_experience"]):
+            if isinstance(item, dict):
+                orig_item = original_resume.get("work_experience", [])[i] if i < len(original_resume.get("work_experience", [])) else {}
+                restored.append({
+                    "company": item.get("company") or orig_item.get("company"),
+                    "position": item.get("title") or orig_item.get("position"),
+                    "location": item.get("location") or orig_item.get("location"),
+                    "start_date": item.get("start_date") or orig_item.get("start_date"),
+                    "end_date": item.get("end_date") or orig_item.get("end_date"),
+                    "description": item.get("description") or orig_item.get("description"),
+                    "highlights": item.get("highlights") or orig_item.get("highlights", [])
+                })
+        structured_resume["work_experience"] = restored
+
+    # projects
+    # projects
+    if "projects" in structured_resume:
+        restored = []
+        existing_titles = set()
+        # 先保留原解析的项目
+        for orig_item in original_resume.get("projects", []):
+            restored.append(orig_item)
+            title = orig_item.get("title") or orig_item.get("project_title")
+            if title:
+                existing_titles.add(title)
+
+        # 再加入 fill_query_exact 新增的项目（避免重复）
+        for item in structured_resume.get("projects", []):
+            if isinstance(item, dict):
+                title = item.get("project_title") or item.get("title")
+                if title and title not in existing_titles:
+                    restored.append({
+                        "title": title,
+                        "highlights": item.get("highlights", []),
+                        "description": item.get("project_content") or item.get("description", "")
+                    })
+                    existing_titles.add(title)
+
+        structured_resume["projects"] = restored
+
+    # education
+    if "education" in structured_resume:
+        restored = []
+        for i, item in enumerate(structured_resume["education"]):
+            if isinstance(item, dict):
+                orig_item = original_resume.get("education", [])[i] if i < len(original_resume.get("education", [])) else {}
+                restored.append({
+                    "school": item.get("school") or orig_item.get("school"),
+                    "degree": item.get("degree") or orig_item.get("degree"),
+                    "grad_date": item.get("grad_date") or orig_item.get("grad_date"),
+                    "description": item.get("description") or orig_item.get("description")
+                })
+        structured_resume["education"] = restored
+
+    return structured_resume
+
+# ------------------------
+# 主 pipeline
+# ------------------------
 def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]:
     results = {}
 
     for file_name in file_names:
         file_path = f"./downloads/{file_name}"
-        logger.info(f"DEBUG: processing file {file_name}")
+        logger.info(f"[PIPELINE] Processing file {file_name}")
         safe_name = sanitize_filename(file_name)
 
-        structured_resume = load_json(safe_name) if load_json(safe_name) else None
+        # 尝试直接加载已解析 JSON
+        structured_resume = load_json(safe_name)
+        parsed_resume = structured_resume.copy() if structured_resume else {}
 
         if structured_resume is None:
+            # 原始解析
             paragraphs = read_document_paragraphs(file_path)
             full_text = "\n".join(paragraphs)
             basic_info = extract_basic_info(full_text)
@@ -119,32 +195,23 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
             }
 
             parsed_resume = parse_resume_to_structured(paragraphs) or {}
-            logger.info(f"DEBUG: parsed_resume: {json.dumps(parsed_resume, ensure_ascii=False, indent=2)}")
-
-            parsed_file = f"./data/parsed_resume_{safe_name}.json"
-            with open(parsed_file, "w", encoding="utf-8") as f:
-                json.dump(parsed_resume, f, ensure_ascii=False, indent=2)
-            logger.info(f"DEBUG: saved parsed_resume to {parsed_file}")
-
             parsed_resume = auto_fill_fields(parsed_resume)
+
             for key, val in parsed_resume.items():
                 if key not in ["name", "email", "phone"]:
                     structured_resume[key] = val
 
-            structured_resume["name"] = structured_resume["name"] or basic_info.get("name")
-            structured_resume["email"] = structured_resume["email"] or basic_info.get("email")
-            structured_resume["phone"] = structured_resume["phone"] or basic_info.get("phone")
-
         user_email = structured_resume.get("email") or safe_name
 
+        # FAISS 构建和加载
         db = load_faiss(safe_name)
         if db is None:
-            logger.info(f"DEBUG: FAISS not found, building for {safe_name}")
+            logger.info(f"[PIPELINE] FAISS not found, building for {safe_name}")
             db = build_faiss(structured_resume)
             if db:
                 save_faiss(safe_name, db)
 
-        # FAISS 查询
+        # FAISS 查询 + 回填
         queries = ["工作经历", "项目经历", "教育经历", "技能"]
         query_results = {}
         if db:
@@ -153,58 +220,39 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
                 raw_results = res.get("results", [])
                 filtered = rule_based_filter(q, raw_results)
                 query_results[q] = filtered
-                logger.info(f"[QUERY DEBUG] query='{q}' -> {len(filtered)} results: {filtered[:3]}")
 
-        # 处理 work, projects, education
-        mapping = [("工作经历", "work_experience"),
-                   ("项目经历", "projects"),
-                   ("教育经历", "education")]
-        for cat, key in mapping:
-            faiss_list = query_results.get(cat)
-            if faiss_list:
-                processed = []
-                for e in faiss_list:
-                    if isinstance(e, str):
-                        processed.append({"description": e})
-                    elif isinstance(e, dict):
-                        processed.append(e)
-                structured_resume[key] = processed
-            else:
-                structured_resume[key] = structured_resume.get(key, [])
+        # 使用 test_faiss 的回填逻辑
+        structured_resume = fill_query_exact(structured_resume, query_results, parsed_resume)
+        structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
+        structured_resume = validate_and_clean(structured_resume)
 
-        # 处理 skills
-        skills_list = query_results.get("技能")
-        if skills_list:
-            skills = []
-            for s in skills_list:
-                if isinstance(s, str):
-                    skills.extend([line.strip() for line in s.splitlines() if line.strip()])
-            structured_resume["skills"] = skills
-        else:
-            structured_resume["skills"] = structured_resume.get("skills", [])
+        # skills 处理
+        skills_list = query_results.get("技能", [])
+        skills = []
+        for s in skills_list:
+            if isinstance(s, str):
+                skills.extend([line.strip() for line in s.splitlines() if line.strip()])
+        structured_resume["skills"] = skills or structured_resume.get("skills", [])
 
-        # exact 模式处理
-        if mode == "exact":
-            structured_resume = fill_query_exact(structured_resume, query_results)
-        else:
-            raise ValueError(f"Unsupported mode: {mode}")
-
-        # other 字段清理
+        # other 字段处理
         structured_resume["other"] = [
             {"description": str(entry.get("description", ""))} if isinstance(entry, dict) else {"description": str(entry)}
             for entry in structured_resume.get("other", [])
         ]
 
-        structured_resume = validate_and_clean(structured_resume)
-
+        # 保存
         save_resume(user_id=user_email, file_name=safe_name + "_faiss_confirmed", data=structured_resume)
         save_json(safe_name + "_faiss_confirmed", structured_resume)
-        logger.info(f"DEBUG: saved resume for {user_email}")
+        logger.info(f"[PIPELINE] Saved resume for {user_email}")
 
         results[user_email] = structured_resume
 
     return results
 
+
+# ------------------------
+# 主函数
+# ------------------------
 if __name__ == "__main__":
     files_to_process = ["Resume(AI).docx"]
     all_results = main_pipeline(files_to_process, mode="exact")

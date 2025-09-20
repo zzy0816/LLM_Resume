@@ -123,9 +123,9 @@ logger = logging.getLogger(__name__)
 # -------------------------
 # 安全版填充函数
 # -------------------------
-def fill_query_exact(structured: dict, query_results: dict) -> dict:
+def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict = None) -> dict:
     """
-    使用 query_results 完全覆盖原 JSON 对应类别
+    使用 query_results 覆盖原 JSON 对应类别，但保留 parsed_resume 的 highlights / title / position / location 等字段
     对所有类别支持字符串或 dict 输入，避免 AttributeError
     支持 N/A 前缀自动跳过
     """
@@ -142,17 +142,16 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
     }
 
     def safe_text(para):
-        """保证返回字符串内容，并去掉 N/A 前缀"""
         if isinstance(para, dict):
             text = str(para.get("description", "")).strip()
         else:
             text = str(para).strip()
         return re.sub(r"^(N/A\s*)", "", text, flags=re.I).strip()
 
-    # 教育经历
+    # ----------------- 教育经历 -----------------
     edu_date_pattern = re.compile(r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})", re.I)
     edu_paras = query_results.get("教育经历", []) or structured.get("education", [])
-    for para in edu_paras:
+    for i, para in enumerate(edu_paras):
         text = safe_text(para)
         if not text:
             continue
@@ -167,15 +166,22 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
         if match:
             month, year = match.groups()
             entry["grad_date"] = f"{month} {year}" if month else year
+
+        # 如果 parsed_resume 有额外字段，尽量保留
+        if parsed_resume and i < len(parsed_resume.get("education", [])):
+            for k in parsed_resume["education"][i]:
+                if k not in entry:
+                    entry[k] = parsed_resume["education"][i][k]
+
         new_structured["education"].append(entry)
 
-    # 工作经历
+    # ----------------- 工作经历 -----------------
     work_date_pattern = re.compile(
         r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})\s*[-–]\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(Present|\d{4})",
         re.I
     )
     work_paras = query_results.get("工作经历", []) or structured.get("work_experience", [])
-    for para in work_paras:
+    for i, para in enumerate(work_paras):
         text = safe_text(para)
         if not text:
             continue
@@ -185,16 +191,25 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
             "title": parts[1] if len(parts) > 1 else "N/A",
             "start_date": "Unknown",
             "end_date": "Present",
-            "description": text
+            "description": text,
+            "highlights": []
         }
         match = work_date_pattern.search(text)
         if match:
             start_month, start_year, end_month, end_year = match.groups()
             entry["start_date"] = f"{start_month} {start_year}" if start_month else start_year
             entry["end_date"] = f"{end_month} {end_year}" if end_month else end_year
+
+        # 回填 parsed_resume 的 highlights / location / title 等
+        if parsed_resume and i < len(parsed_resume.get("work_experience", [])):
+            parsed_entry = parsed_resume["work_experience"][i]
+            for k in ["highlights", "location", "title"]:
+                if k in parsed_entry:
+                    entry[k] = parsed_entry[k]
+
         new_structured["work_experience"].append(entry)
 
-    # 项目经历
+    # ----------------- 项目经历 -----------------
     proj_paras = query_results.get("项目经历", []) or structured.get("projects", [])
     for para in proj_paras:
         text = safe_text(para)
@@ -203,21 +218,37 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
         lines = [l.strip() for l in text.split("\n") if l.strip()]
         if not lines:
             continue
+        # 判断第一行是否是 title
         if re.match(r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()):
             title = ""
             content = "\n".join(lines)
         else:
             title = lines[0]
             content = "\n".join(lines[1:])
+
+        # 尝试按 title 匹配原 parsed_resume
+        parsed_entry = None
+        if parsed_resume:
+            parsed_entry = next((p for p in parsed_resume.get("projects", []) if p.get("title") == title), None)
+
+        highlights = []
+        # 先加入 parsed_resume highlights
+        if parsed_entry and "highlights" in parsed_entry:
+            highlights.extend(parsed_entry["highlights"])
+        # 再加入 description 中拆行内容（去重）
+        for line in content.splitlines():
+            line = line.strip()
+            if line and line not in highlights:
+                highlights.append(line)
+
         entry = {
-            "project_title": title if title else content[:60],
-            "start_date": "Unknown",
-            "end_date": "Present",
-            "project_content": content
+            "title": title if title else content[:60],
+            "highlights": highlights,
+            "description": None
         }
         new_structured["projects"].append(entry)
 
-    # 技能
+    # ----------------- 技能 -----------------
     skills_paras = query_results.get("技能", []) or structured.get("skills", [])
     for para in skills_paras:
         text = safe_text(para)
@@ -228,7 +259,7 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
     if not new_structured["skills"]:
         new_structured["skills"] = structured.get("skills", [])
 
-    # 其他
+    # ----------------- 其他 -----------------
     other_paras = query_results.get("其他", []) or structured.get("other", [])
     for para in other_paras:
         text = safe_text(para)
@@ -236,36 +267,8 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
             continue
         new_structured["other"].append({"description": text})
 
+    # ----------------- name 兜底 -----------------
+    if new_structured.get("name") is None and parsed_resume:
+        new_structured["name"] = parsed_resume.get("name")
+
     return new_structured
-
-
-# -------------------------
-# 测试
-# -------------------------
-if __name__ == "__main__":
-    # 模拟 FAISS 返回带 N/A
-    query_results = {
-        "工作经历": ["N/A | OpenAI | Research Scientist | Jan 2023 – Present"],
-        "项目经历": ["N/A\nBuilt a QA system using PyTorch and Python"],
-        "教育经历": ["N/A | Northeastern University | Master | 2025"],
-        "技能": ["N/A | Python\nSQL\nPandas"],
-        "其他": ["N/A | Some other info unrelated"]
-    }
-
-    # 原始结构化 resume
-    structured_resume = {
-        "name": "Zhenyu Zhang",
-        "email": "zhang@example.com",
-        "phone": "+1234567890",
-        "education": [],
-        "work_experience": [],
-        "projects": [],
-        "skills": [],
-        "other": []
-    }
-
-    filled_resume = fill_query_exact(structured_resume, query_results)
-
-    import json
-    print(json.dumps(filled_resume, ensure_ascii=False, indent=2))
-    

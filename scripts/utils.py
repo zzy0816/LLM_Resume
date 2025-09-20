@@ -5,7 +5,7 @@ import logging
 # 分类段落
 # -------------------------
 CATEGORY_FIELDS = {
-    "work_experience": ["title","company","start_date","end_date","description", "Professional Experience", "Industry Experience", "Experience"],
+    "work_experience": ["company","position","location","start_date","end_date","description", " highlights"],
     "education": ["school","degree","grad_date","description"],
     "projects": ["title","highlights"],
     "skills": ["skills"],
