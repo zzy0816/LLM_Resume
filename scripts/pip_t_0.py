@@ -1,4 +1,4 @@
-import logging, json
+import logging, json, re
 from files import load_faiss, save_faiss, save_json, load_json
 from doc import read_document_paragraphs
 from parser_test import parse_resume_to_structured
@@ -161,6 +161,22 @@ def restore_parsed_structure(structured_resume, original_resume):
 
     return structured_resume
 
+def clean_skills(raw_skills: list[str]) -> list[str]:
+    """统一技能格式，拆分多技能条目"""
+    cleaned = []
+    for s in raw_skills:
+        if not s:
+            continue
+        # 去掉可能的前缀，如 "Frameworks & Libraries:"
+        s = s.strip()
+        s = re.sub(r"^(Frameworks\s*&\s*Libraries:)", "", s, flags=re.I).strip()
+        # 按逗号或换行拆分
+        parts = re.split(r"[,\n]", s)
+        parts = [p.strip() for p in parts if p.strip()]
+        cleaned.extend(parts)
+    return cleaned
+
+
 # ------------------------
 # 主 pipeline
 # ------------------------
@@ -227,12 +243,8 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
         structured_resume = validate_and_clean(structured_resume)
 
         # skills 处理
-        skills_list = query_results.get("技能", [])
-        skills = []
-        for s in skills_list:
-            if isinstance(s, str):
-                skills.extend([line.strip() for line in s.splitlines() if line.strip()])
-        structured_resume["skills"] = skills or structured_resume.get("skills", [])
+        skills_list = query_results.get("技能", []) or structured_resume.get("skills", [])
+        structured_resume["skills"] = clean_skills(skills_list)
 
         # other 字段处理
         structured_resume["other"] = [
@@ -248,7 +260,6 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
         results[user_email] = structured_resume
 
     return results
-
 
 # ------------------------
 # 主函数

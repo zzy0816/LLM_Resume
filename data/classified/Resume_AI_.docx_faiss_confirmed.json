@@ -69,7 +69,13 @@
     "Python",
     "SQL",
     "Tableau",
-    "Frameworks & Libraries: TensorFlow, Pytorch, Scikit-learn, Pandas, NumPy, Seaborn, Langchain"
+    "TensorFlow",
+    "Pytorch",
+    "Scikit-learn",
+    "Pandas",
+    "NumPy",
+    "Seaborn",
+    "Langchain"
   ],
   "other": []
 }
