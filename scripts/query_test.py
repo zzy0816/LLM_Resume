@@ -82,27 +82,53 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
 
     return {"query": query, "results": candidate_paras}
 
-
 # -------------------------
-# 多类别整合查询
+# 多类别整合查询（安全版）
 # -------------------------
 def query_all_categories(db, structured_resume, top_k=10):
     queries = ["工作经历", "项目经历", "教育经历", "技能", "其他"]
     all_results = {}
     for q in queries:
-        res = query_dynamic_category(db, structured_resume, q, top_k=top_k)
-        all_results[q] = res.get("results", [])
+        try:
+            res = query_dynamic_category(db, structured_resume, q, top_k=top_k)
+            paras = res.get("results", [])
+            # 如果严格过滤没有结果，用非严格模式 fallback
+            if not paras:
+                res = query_dynamic_category(db, structured_resume, q, top_k=top_k, use_category_filter=False)
+                paras = res.get("results", [])
+            all_results[q] = paras
+        except Exception as e:
+            logger.warning(f"[QUERY ALL] Error querying '{q}': {e}")
+            all_results[q] = []
     return all_results
 
 
 # -------------------------
-# 填充结构化 JSON
+# 填充结构化 JSON（安全版）
+# -------------------------
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+import logging
+import re
+from utils import normalize_category, normalize_skills, extract_skills_from_text
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+# -------------------------
+# 安全版填充函数
 # -------------------------
 def fill_query_exact(structured: dict, query_results: dict) -> dict:
     """
     使用 query_results 完全覆盖原 JSON 对应类别
+    对所有类别支持字符串或 dict 输入，避免 AttributeError
+    支持 N/A 前缀自动跳过
     """
-    # 基础信息
     base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
     new_structured = {
         "name": base_info.get("name"),
@@ -115,53 +141,66 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
         "other": []
     }
 
-    # ---- 教育经历 ----
-    edu_date_pattern = re.compile(
-        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-        r"(\d{4})",
-        re.I
-    )
-    for para in query_results.get("教育经历", []):
-        parts = [p.strip() for p in para.split("|")]
+    def safe_text(para):
+        """保证返回字符串内容，并去掉 N/A 前缀"""
+        if isinstance(para, dict):
+            text = str(para.get("description", "")).strip()
+        else:
+            text = str(para).strip()
+        return re.sub(r"^(N/A\s*)", "", text, flags=re.I).strip()
+
+    # 教育经历
+    edu_date_pattern = re.compile(r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})", re.I)
+    edu_paras = query_results.get("教育经历", []) or structured.get("education", [])
+    for para in edu_paras:
+        text = safe_text(para)
+        if not text:
+            continue
+        parts = [p.strip() for p in text.split("|")]
         entry = {
             "school": parts[0] if len(parts) > 0 else "N/A",
             "degree": parts[1] if len(parts) > 1 else "N/A",
             "grad_date": "Unknown",
-            "description": para
+            "description": text
         }
-        match = edu_date_pattern.search(para)
+        match = edu_date_pattern.search(text)
         if match:
             month, year = match.groups()
             entry["grad_date"] = f"{month} {year}" if month else year
         new_structured["education"].append(entry)
 
-    # ---- 工作经历 ----
+    # 工作经历
     work_date_pattern = re.compile(
-        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-        r"(\d{4})\s*[-–]\s*"
-        r"(?:(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+)?"
-        r"(Present|\d{4})",
+        r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})\s*[-–]\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(Present|\d{4})",
         re.I
     )
-    for para in query_results.get("工作经历", []):
-        parts = [p.strip() for p in para.split("|")]
+    work_paras = query_results.get("工作经历", []) or structured.get("work_experience", [])
+    for para in work_paras:
+        text = safe_text(para)
+        if not text:
+            continue
+        parts = [p.strip() for p in text.split("|")]
         entry = {
             "company": parts[0] if len(parts) > 0 else "N/A",
             "title": parts[1] if len(parts) > 1 else "N/A",
             "start_date": "Unknown",
             "end_date": "Present",
-            "description": para
+            "description": text
         }
-        match = work_date_pattern.search(para)
+        match = work_date_pattern.search(text)
         if match:
             start_month, start_year, end_month, end_year = match.groups()
             entry["start_date"] = f"{start_month} {start_year}" if start_month else start_year
             entry["end_date"] = f"{end_month} {end_year}" if end_month else end_year
         new_structured["work_experience"].append(entry)
 
-    # ---- 项目经历 ----
-    for para in query_results.get("项目经历", []):
-        lines = [l.strip() for l in para.split("\n") if l.strip()]
+    # 项目经历
+    proj_paras = query_results.get("项目经历", []) or structured.get("projects", [])
+    for para in proj_paras:
+        text = safe_text(para)
+        if not text:
+            continue
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
         if not lines:
             continue
         if re.match(r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()):
@@ -178,42 +217,42 @@ def fill_query_exact(structured: dict, query_results: dict) -> dict:
         }
         new_structured["projects"].append(entry)
 
-    # ---- 技能 ----
-    for para in query_results.get("技能", []):
-        extracted = extract_skills_from_text(para.lower())  # 支持大小写
+    # 技能
+    skills_paras = query_results.get("技能", []) or structured.get("skills", [])
+    for para in skills_paras:
+        text = safe_text(para)
+        if not text:
+            continue
+        extracted = extract_skills_from_text(text.lower())
         new_structured["skills"].extend(extracted)
-    new_structured["skills"] = normalize_skills(new_structured["skills"])
+    if not new_structured["skills"]:
+        new_structured["skills"] = structured.get("skills", [])
 
-    # ---- 其他 ----
-    for para in query_results.get("其他", []):
-        new_structured["other"].append({"description": para})
+    # 其他
+    other_paras = query_results.get("其他", []) or structured.get("other", [])
+    for para in other_paras:
+        text = safe_text(para)
+        if not text:
+            continue
+        new_structured["other"].append({"description": text})
 
     return new_structured
 
+
+# -------------------------
+# 测试
+# -------------------------
 if __name__ == "__main__":
-    # -------------------------
-    # Mock 数据模拟 FAISS 返回
-    # -------------------------
-    class MockDoc:
-        def __init__(self, content, category):
-            self.page_content = content
-            self.metadata = {"category": category}
+    # 模拟 FAISS 返回带 N/A
+    query_results = {
+        "工作经历": ["N/A | OpenAI | Research Scientist | Jan 2023 – Present"],
+        "项目经历": ["N/A\nBuilt a QA system using PyTorch and Python"],
+        "教育经历": ["N/A | Northeastern University | Master | 2025"],
+        "技能": ["N/A | Python\nSQL\nPandas"],
+        "其他": ["N/A | Some other info unrelated"]
+    }
 
-    class MockDB:
-        def similarity_search(self, query, k=50):
-            """根据 query 返回模拟文档"""
-            sample_docs = [
-                MockDoc("Northeastern University | Master | 2025", "education"),
-                MockDoc("Worked at OpenAI | Research Scientist | Jan 2023 - Present", "work_experience"),
-                MockDoc("Built a recommendation system using PyTorch and Python", "projects"),
-                MockDoc("Python, PyTorch, TensorFlow, SQL, Pandas", "skills"),
-                MockDoc("Some other information unrelated", "other")
-            ]
-            return sample_docs[:k]
-
-    # -------------------------
-    # 模拟结构化 resume
-    # -------------------------
+    # 原始结构化 resume
     structured_resume = {
         "name": "Zhenyu Zhang",
         "email": "zhang@example.com",
@@ -225,25 +264,8 @@ if __name__ == "__main__":
         "other": []
     }
 
-    # -------------------------
-    # 执行多类别查询
-    # -------------------------
-    db = MockDB()
-    query_results = query_all_categories(db, structured_resume, top_k=3)
-
-    # 打印查询结果
-    print("=== 查询结果 ===")
-    for cat, paras in query_results.items():
-        print(f"{cat}: {len(paras)} 条")
-        for p in paras:
-            print("  ", p[:60], "..." if len(p) > 60 else "")
-
-    # -------------------------
-    # 填充结构化 resume
-    # -------------------------
     filled_resume = fill_query_exact(structured_resume, query_results)
 
-    # 打印填充后的 resume
     import json
-    print("\n=== 填充后的结构化 Resume ===")
     print(json.dumps(filled_resume, ensure_ascii=False, indent=2))
+    

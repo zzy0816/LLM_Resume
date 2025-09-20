@@ -8,8 +8,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from utils import normalize_category
-from parser import CATEGORY_FIELDS
-from doc import semantic_split
 
 logging.basicConfig(
     level=logging.INFO,
