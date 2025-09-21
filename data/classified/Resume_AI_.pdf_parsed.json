@@ -1,19 +1,19 @@
 {
   "name": "Zhenyu Zhang",
   "email": "Zhang.zhenyu6@northeastern.edu",
-  "phone": "+1 (860) 234-7101 ",
+  "phone": "+1 (860) 234-7101",
   "education": [
     {
       "school": "Northeastern University",
       "degree": "Master of Professional Study in Applied Machine Intelligence",
       "grad_date": "2025",
-      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0\nMaster of Professional Study in Applied Machine Intelligence\nNortheastern University"
+      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0"
     },
     {
       "school": "University of Connecticut",
       "degree": "Bachelor of Art",
       "grad_date": "May 2022",
-      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022\nBachelor of Art\nUniversity of Connecticut"
+      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022"
     }
   ],
   "work_experience": [
@@ -23,7 +23,7 @@
       "location": "Piscataway Township, NJ",
       "start_date": "Sep 2022",
       "end_date": "Jul 2023",
-      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul\nYangtze River Consulting Service LLC",
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul",
       "highlights": [
         "- Built a QA system with Transformer, improving automated question answering accuracy.",
         "- Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.",
@@ -36,7 +36,7 @@
       "location": "New York, NY",
       "start_date": "May 2025",
       "end_date": "Present",
-      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 –\nNew York Technology & Management LLC",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 –",
       "highlights": [
         "Present",
         "- Built React agent with LangChain tool-calling to automate internal tool, reducing manual work.",
@@ -67,16 +67,16 @@
     }
   ],
   "skills": [
+    "LangChain",
+    "NumPy",
+    "Pandas",
+    "PyTorch",
     "Python",
     "SQL",
-    "Tableau",
-    "TensorFlow",
-    "Pytorch",
     "Scikit-learn",
-    "Pandas",
-    "NumPy",
     "Seaborn",
-    "Langchain"
+    "Tableau",
+    "TensorFlow"
   ],
   "other": [
     {

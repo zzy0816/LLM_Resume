@@ -105,7 +105,7 @@ def test_faiss(parsed_json_file: str):
 if __name__ == "__main__":
     import os
     print("CWD:", os.getcwd())
-    print("Exists:", os.path.exists(r"data\classified\Resume_AI_.docx_parsed.json"))
+    print("Exists:", os.path.exists(r"data\classified\Resume_AI_.pdf_parsed.json"))
 
-    test_file = r"data\classified\Resume_AI_.docx_parsed.json"  # 使用已保存的 parsed.json 文件
+    test_file = r"data\classified\Resume_AI_.pdf_parsed.json"  # 使用已保存的 parsed.json 文件
     test_faiss(test_file)

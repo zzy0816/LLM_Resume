@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from files import save_json
 from doc import read_document_paragraphs
 from parser_test import parse_resume_to_structured 
@@ -59,6 +60,110 @@ def make_safe_for_mongo(obj):
 
     return _sanitize(obj)
 
+import re
+
+def fix_resume_dates(structured_resume: dict) -> dict:
+    """
+    修复教育和工作经历日期：
+    1. 教育经历：优先使用 description 中 Month Year，否则用年份。
+    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_date >= start_date。
+    3. highlights 中纯年份或 "Present" 会被清理。
+    """
+    if not structured_resume:
+        return {}
+
+    # ---- 教育经历 ----
+    month_year_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    year_pattern = r"(19|20)\d{2}"
+
+    for edu in structured_resume.get("education", []):
+        desc = edu.get("description", "")
+        desc_clean = re.sub(r"[\r\n]+", " ", desc)
+        desc_clean = re.sub(r"\s+", " ", desc_clean).strip()
+
+        match = re.search(month_year_pattern, desc_clean)
+        if match:
+            edu["grad_date"] = match.group(0)
+        else:
+            match_year = re.search(year_pattern, desc_clean)
+            if match_year:
+                edu["grad_date"] = match_year.group(0)
+
+    # ---- 工作经历 ----
+    work_exp = structured_resume.get("work_experience", [])
+    structured_resume["work_experience"] = fix_work_dates(work_exp)
+
+    return structured_resume
+
+def fix_work_dates(work_experience: list) -> list:
+    month_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+    year_pattern = r"(19|20)\d{2}"
+
+    for job in work_experience:
+        desc = job.get("description", "")
+        highlights = job.get("highlights", [])
+
+        # 合并换行并压缩空格
+        desc_clean = re.sub(r"[\r\n]+", " ", desc)
+        desc_clean = re.sub(r"\s+", " ", desc_clean).strip()
+
+        # 收集 highlights 年份
+        highlight_years = []
+        cleaned_highlights = []
+        for h in highlights:
+            h_strip = h.strip()
+            if re.fullmatch(r"\d{4}", h_strip):
+                highlight_years.append(int(h_strip))
+            else:
+                cleaned_highlights.append(h)
+                highlight_years.extend([int(y) for y in re.findall(year_pattern, h_strip)])
+        job["highlights"] = cleaned_highlights
+
+        # 提取 description 中所有 Month Year
+        month_year_matches = re.findall(rf"{month_pattern}\s+{year_pattern}", desc_clean)
+        # 提取 description 中只有 Month 的部分
+        months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
+
+        # --- start_date ---
+        start_date = job.get("start_date")
+        if not start_date or str(start_date).lower() in ["null", "n/a", ""]:
+            start_date = month_year_matches[0] if month_year_matches else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+
+        # --- end_date ---
+        end_date = job.get("end_date")
+        if not end_date or str(end_date).lower() in ["null", "n/a", ""]:
+            if len(month_year_matches) >= 2:
+                end_date = month_year_matches[1]
+            elif months_only_matches:
+                # Month-only，年份 = start_date 年 +1
+                start_m, start_y = start_date.split()
+                start_y = int(start_y)
+                # 找到 end 月份，如果只有一个 month-only，用 start month +1 年
+                end_m = months_only_matches[1] if len(months_only_matches) > 1 else months_only_matches[0]
+                end_date = f"{end_m} {start_y + 1}"
+            elif highlight_years:
+                end_date = f"{start_date.split()[0]} {max(highlight_years)}"
+            else:
+                end_date = "Present"
+
+        # --- 确保 end_date >= start_date ---
+        try:
+            start_m, start_y = start_date.split()
+            start_y = int(start_y)
+            if end_date.lower() != "present":
+                end_m, end_y = end_date.split()
+                end_y = int(end_y)
+                if end_y < start_y:
+                    end_y = start_y + 1
+                    end_date = f"{end_m} {end_y}"
+        except Exception:
+            pass
+
+        job["start_date"] = start_date
+        job["end_date"] = end_date
+
+    return work_experience
+
 def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
     results = {}
 
@@ -91,6 +196,7 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
         structured_resume = validate_and_clean(structured_resume) or {}
         logger.info(f"Other after validate_and_clean: {structured_resume.get('other')}")
 
+        structured_resume = fix_resume_dates(structured_resume)
 
         # 4️⃣ 转换为 MongoDB 可插入格式，避免循环引用
         safe_resume_for_db = make_safe_for_mongo(structured_resume)
@@ -124,7 +230,7 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
     return results
 
 if __name__ == "__main__":
-    files_to_process = ["Resume(AI).docx"]
+    files_to_process = ["Resume(AI).pdf"]
     all_results = main_pipeline(files_to_process)
     for user_email, safe_structured_resume in all_results.items():
         logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")

@@ -2,7 +2,7 @@ import logging, json, re
 from files import load_faiss, save_faiss, save_json, load_json
 from doc import read_document_paragraphs
 from parser_test import parse_resume_to_structured
-from utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean
+from utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean, fix_resume_dates
 from query_test import query_dynamic_category, fill_query_exact
 from db import save_resume
 
@@ -25,70 +25,41 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
     logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {user_email}")
 
     categories = ["work_experience", "projects", "education", "skills", "other"]
-    cat_map = {cat: cat for cat in categories}
 
     for cat in categories:
         entries = structured_resume.get(cat, [])
-        logger.info(f"[FAISS DEBUG] Processing category '{cat}' with {len(entries)} entries")
-
         if not entries:
             continue
 
-        if cat == "skills" and isinstance(entries, list):
-            text = "\n".join([str(s).strip() for s in entries if s])
-            if text:
-                docs.append(LC_Document(page_content=text, metadata={"category": cat_map[cat]}))
-                logger.info(f"[FAISS INSERT] cat={cat_map[cat]}, snippet={text[:80]}")
-            continue
-
         for i, entry in enumerate(entries):
-            meta_cat = cat_map[cat]
             text = ""
+            meta = {"category": cat}
 
+            # 文本构建
             if cat == "projects" and isinstance(entry, dict):
-                title_text = entry.get("project_title") or entry.get("title") or ""
-                title_text = title_text.strip()
-                highlights = entry.get("highlights", [])
-                highlights_text = "\n".join([h.strip() for h in highlights if h.strip()])
-
-                if title_text and highlights_text:
-                    text = title_text + "\n" + highlights_text
-                elif title_text:
-                    text = title_text
-                elif highlights_text:
-                    text = highlights_text
-                else:
-                    text = None
-
+                title = entry.get("project_title") or entry.get("title") or ""
+                highlights = "\n".join(entry.get("highlights", []))
+                text = "\n".join([title, highlights]).strip()
             elif isinstance(entry, dict):
-                text_fields = []
-                for key in ["description", "role", "company", "degree", "school"]:
-                    val = entry.get(key)
-                    if val and isinstance(val, str):
-                        val = val.strip()
-                        if val:
-                            text_fields.append(val)
-                text = "\n".join(text_fields).strip() or None
-
+                text = entry.get("description") or ""
+                # 保存原始结构化字段到 metadata
+                for k in ["company","position","location","start_date","end_date",
+                          "school","degree","grad_date"]:
+                    if k in entry:
+                        meta[k] = entry[k]
             elif isinstance(entry, str):
-                text = entry.strip() or None
+                text = entry.strip()
 
             if not text:
-                text = f"[{meta_cat} 未提供内容]"
-                logger.warning(f"[FAISS WARN] Entry {i} in category '{cat}' is empty, using placeholder.")
+                text = f"[{cat} 未提供内容]"
 
-            docs.append(LC_Document(page_content=text, metadata={"category": meta_cat}))
-            logger.info(f"[FAISS INSERT] cat={meta_cat}, snippet={text[:80]}")
-
-    if not docs:
-        logger.warning("[FAISS WARN] No docs generated, FAISS DB will be empty")
-        return None
+            docs.append(LC_Document(page_content=text, metadata=meta))
 
     if embeddings_model is None:
         embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     db = FAISS.from_documents(docs, embeddings_model)
-    logger.info(f"[FAISS INFO] FAISS database built with {len(docs)} docs")
+    logger.info(f"[FAISS INFO] FAISS DB built with {len(docs)} docs")
     return db
 
 # ------------------------
@@ -120,18 +91,15 @@ def restore_parsed_structure(structured_resume, original_resume):
         structured_resume["work_experience"] = restored
 
     # projects
-    # projects
     if "projects" in structured_resume:
         restored = []
         existing_titles = set()
-        # 先保留原解析的项目
         for orig_item in original_resume.get("projects", []):
             restored.append(orig_item)
             title = orig_item.get("title") or orig_item.get("project_title")
             if title:
                 existing_titles.add(title)
 
-        # 再加入 fill_query_exact 新增的项目（避免重复）
         for item in structured_resume.get("projects", []):
             if isinstance(item, dict):
                 title = item.get("project_title") or item.get("title")
@@ -161,21 +129,50 @@ def restore_parsed_structure(structured_resume, original_resume):
 
     return structured_resume
 
+# ------------------------
+# skills 处理
+# ------------------------
 def clean_skills(raw_skills: list[str]) -> list[str]:
     """统一技能格式，拆分多技能条目"""
     cleaned = []
     for s in raw_skills:
         if not s:
             continue
-        # 去掉可能的前缀，如 "Frameworks & Libraries:"
         s = s.strip()
         s = re.sub(r"^(Frameworks\s*&\s*Libraries:)", "", s, flags=re.I).strip()
-        # 按逗号或换行拆分
         parts = re.split(r"[,\n]", s)
         parts = [p.strip() for p in parts if p.strip()]
         cleaned.extend(parts)
     return cleaned
 
+# ------------------------
+# 回填工作经历时间
+# ------------------------
+def restore_work_experience(structured_resume, parsed_resume, faiss_results):
+    if "work_experience" not in structured_resume:
+        return structured_resume
+
+    restored = []
+    for i, item in enumerate(structured_resume["work_experience"]):
+        if i < len(faiss_results.get("工作经历", [])):
+            faiss_entry = getattr(faiss_results["工作经历"][i], "metadata", {})
+        else:
+            faiss_entry = {}
+
+        orig_item = parsed_resume.get("work_experience", [])[i] if i < len(parsed_resume.get("work_experience", [])) else {}
+
+        restored.append({
+            "company": item.get("company") or orig_item.get("company"),
+            "position": item.get("title") or orig_item.get("position"),
+            "location": item.get("location") or orig_item.get("location"),
+            "start_date": faiss_entry.get("start_date") or orig_item.get("start_date") or "Unknown",
+            "end_date": faiss_entry.get("end_date") or orig_item.get("end_date") or "Present",
+            "description": item.get("description") or orig_item.get("description"),
+            "highlights": item.get("highlights") or orig_item.get("highlights", [])
+        })
+
+    structured_resume["work_experience"] = restored
+    return structured_resume
 
 # ------------------------
 # 主 pipeline
@@ -188,12 +185,10 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
         logger.info(f"[PIPELINE] Processing file {file_name}")
         safe_name = sanitize_filename(file_name)
 
-        # 尝试直接加载已解析 JSON
         structured_resume = load_json(safe_name)
         parsed_resume = structured_resume.copy() if structured_resume else {}
 
         if structured_resume is None:
-            # 原始解析
             paragraphs = read_document_paragraphs(file_path)
             full_text = "\n".join(paragraphs)
             basic_info = extract_basic_info(full_text)
@@ -219,7 +214,6 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 
         user_email = structured_resume.get("email") or safe_name
 
-        # FAISS 构建和加载
         db = load_faiss(safe_name)
         if db is None:
             logger.info(f"[PIPELINE] FAISS not found, building for {safe_name}")
@@ -227,32 +221,27 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
             if db:
                 save_faiss(safe_name, db)
 
-        # FAISS 查询 + 回填
         queries = ["工作经历", "项目经历", "教育经历", "技能"]
         query_results = {}
         if db:
             for q in queries:
                 res = query_dynamic_category(db, structured_resume, q, top_k=10)
-                raw_results = res.get("results", [])
-                filtered = rule_based_filter(q, raw_results)
+                filtered = rule_based_filter(q, res.get("results", []))
                 query_results[q] = filtered
 
-        # 使用 test_faiss 的回填逻辑
         structured_resume = fill_query_exact(structured_resume, query_results, parsed_resume)
         structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
+        structured_resume = restore_work_experience(structured_resume, parsed_resume, query_results)
         structured_resume = validate_and_clean(structured_resume)
+        structured_resume = fix_resume_dates(structured_resume)
 
-        # skills 处理
-        skills_list = query_results.get("技能", []) or structured_resume.get("skills", [])
-        structured_resume["skills"] = clean_skills(skills_list)
+        structured_resume["skills"] = clean_skills(query_results.get("技能", []) or structured_resume.get("skills", []))
 
-        # other 字段处理
         structured_resume["other"] = [
             {"description": str(entry.get("description", ""))} if isinstance(entry, dict) else {"description": str(entry)}
             for entry in structured_resume.get("other", [])
         ]
 
-        # 保存
         save_resume(user_id=user_email, file_name=safe_name + "_faiss_confirmed", data=structured_resume)
         save_json(safe_name + "_faiss_confirmed", structured_resume)
         logger.info(f"[PIPELINE] Saved resume for {user_email}")
@@ -265,7 +254,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 # 主函数
 # ------------------------
 if __name__ == "__main__":
-    files_to_process = ["Resume(AI).docx"]
+    files_to_process = ["Resume(AI).pdf"]
     all_results = main_pipeline(files_to_process, mode="exact")
     for user_email, structured_resume in all_results.items():
         logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")

@@ -229,9 +229,7 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
             result[key] = value
     return result
 
-# parser_fixed.py
 import re
-import json
 import logging
 from typing import List, Optional, Tuple
 
@@ -262,17 +260,60 @@ def extract_phone(text: str) -> Optional[str]:
     candidates = re.findall(r'(\+?\d[\d\-\s\(\)]{6,}\d)', text)
     return max([c.strip() for c in candidates], key=len) if candidates else None
 
-def parse_date_range(date_str: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
-    if not date_str:
+import re
+from typing import Tuple, Optional
+
+POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
+COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
+
+# ----------------- 日期解析 -----------------
+from typing import Optional, Tuple
+import re
+
+def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+    """
+    支持 'Sep 2022 – Jul' 或 'Jun 2021 – Aug 2022' 或 'May 2025 – Present'。
+    如果 end 没有年份，则推断和 start 同年或加1年。
+    """
+    if not date_range:
         return None, None
-    parts = re.split(r'\s*(?:–|-|—|to)\s*', date_str)
-    if len(parts) == 1:
-        yrs = re.findall(r'\b(19|20)\d{2}\b', date_str)
-        if yrs:
-            return yrs[0], yrs[-1] if len(yrs) > 1 else yrs[0]
-        return date_str.strip(), None
-    start = parts[0].strip() or None
-    end = parts[1].strip() or None
+    date_range = date_range.replace("–", "-").strip()
+    parts = [p.strip() for p in date_range.split("-")]
+    start, end = parts[0] if parts else None, parts[1] if len(parts) > 1 else None
+
+    # --- 处理 end 为月份但无年份 ---
+    if start and end:
+        start_match = re.search(r'([A-Za-z]+)\s*(\d{4})', start)
+        end_match = re.search(r'([A-Za-z]+)\s*(\d{4})', end)
+
+        if start_match:
+            start_month, start_year = start_match.group(1), int(start_match.group(2))
+        else:
+            start_month, start_year = None, None
+
+        if end_match:
+            end_month, end_year = end_match.group(1), int(end_match.group(2))
+        else:
+            end_month = end.strip()
+            end_year = start_year  # 推断同年
+
+            # 如果 end_month 是 "Present"，跳过月份比较
+            if end_month != "Present":
+                month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+                if start_month and end_month and month_order.index(end_month) < month_order.index(start_month):
+                    end_year += 1
+
+        end = f"{end_month} {end_year}" if end_month and end_year and end_month != "Present" else end
+
+    # 如果 next_line 是年份，也可以覆盖 end
+    if next_line:
+        next_line = next_line.strip()
+        if re.match(r'^(19|20)\d{2}$', next_line):
+            if end and end != "Present":
+                end = f"{end.split()[0]} {next_line}"
+            else:
+                end = next_line
+
     return start, end
 
 def is_project_title(text: str) -> bool:
@@ -302,7 +343,7 @@ def is_work_line(text: str) -> bool:
     has_year = any(re.search(r"(19|20)\d{2}", p) for p in parts)
     return has_pos and has_comp and has_year
 
-def parse_work_line(text: str):
+def parse_work_line(text: str, next_line: Optional[str] = None):
     parts = [p.strip() for p in text.split("|")]
     company, position, location, date_range = None, None, None, None
     for p in parts:
@@ -311,11 +352,11 @@ def parse_work_line(text: str):
             position = p
         elif any(k in low for k in COMPANY_KEYWORDS):
             company = p
-        elif re.search(r"\b[A-Z]{2}\b", p):  # 州缩写作为地点
+        elif re.search(r'\b[A-Z]{2}\b', p):  # 州缩写
             location = p
-        elif re.search(r"(19|20)\d{2}", p):
+        elif re.search(r"(19|20)\d{2}", p) or re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", p):
             date_range = p
-    start, end = parse_date_range(date_range) if date_range else (None, None)
+    start, end = parse_date_range(date_range, next_line)
     return {
         "company": company,
         "position": position,
@@ -334,7 +375,8 @@ def parse_education_line(text: str):
     for p in parts[1:]:
         if any(word in p.lower() for word in ["bachelor", "master", "phd", "degree", "art", "science", "study"]):
             degree = p
-        yr = re.search(r'\b(19|20)\d{2}\b', p)
+        # 支持月份 + 年份
+        yr = re.search(r'((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*)?\d{4}', p)
         if yr:
             grad_date = yr.group(0)
     return {"school": school, "degree": degree, "grad_date": grad_date, "description": text}
@@ -395,6 +437,108 @@ def validate_and_clean(structured: dict) -> dict:
     cleaned["skills"] = normalize_skills(cleaned["skills"])
 
     return cleaned
+
+def fix_resume_dates(structured_resume: dict) -> dict:
+    """
+    修复教育和工作经历日期：
+    1. 教育经历：优先使用 description 中 Month Year，否则用年份。
+    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_date >= start_date。
+    3. highlights 中纯年份或 "Present" 会被清理。
+    """
+    if not structured_resume:
+        return {}
+
+    # ---- 教育经历 ----
+    month_year_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    year_pattern = r"(19|20)\d{2}"
+
+    for edu in structured_resume.get("education", []):
+        desc = edu.get("description", "")
+        desc_clean = re.sub(r"[\r\n]+", " ", desc)
+        desc_clean = re.sub(r"\s+", " ", desc_clean).strip()
+
+        match = re.search(month_year_pattern, desc_clean)
+        if match:
+            edu["grad_date"] = match.group(0)
+        else:
+            match_year = re.search(year_pattern, desc_clean)
+            if match_year:
+                edu["grad_date"] = match_year.group(0)
+
+    # ---- 工作经历 ----
+    work_exp = structured_resume.get("work_experience", [])
+    structured_resume["work_experience"] = fix_work_dates(work_exp)
+
+    return structured_resume
+
+def fix_work_dates(work_experience: list) -> list:
+    month_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+    year_pattern = r"(19|20)\d{2}"
+
+    for job in work_experience:
+        desc = job.get("description", "")
+        highlights = job.get("highlights", [])
+
+        # 合并换行并压缩空格
+        desc_clean = re.sub(r"[\r\n]+", " ", desc)
+        desc_clean = re.sub(r"\s+", " ", desc_clean).strip()
+
+        # 收集 highlights 年份
+        highlight_years = []
+        cleaned_highlights = []
+        for h in highlights:
+            h_strip = h.strip()
+            if re.fullmatch(r"\d{4}", h_strip):
+                highlight_years.append(int(h_strip))
+            else:
+                cleaned_highlights.append(h)
+                highlight_years.extend([int(y) for y in re.findall(year_pattern, h_strip)])
+        job["highlights"] = cleaned_highlights
+
+        # 提取 description 中所有 Month Year
+        month_year_matches = re.findall(rf"{month_pattern}\s+{year_pattern}", desc_clean)
+        # 提取 description 中只有 Month 的部分
+        months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
+
+        # --- start_date ---
+        start_date = job.get("start_date")
+        if not start_date or str(start_date).lower() in ["null", "n/a", ""]:
+            start_date = month_year_matches[0] if month_year_matches else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+
+        # --- end_date ---
+        end_date = job.get("end_date")
+        if not end_date or str(end_date).lower() in ["null", "n/a", ""]:
+            if len(month_year_matches) >= 2:
+                end_date = month_year_matches[1]
+            elif months_only_matches:
+                # Month-only，年份 = start_date 年 +1
+                start_m, start_y = start_date.split()
+                start_y = int(start_y)
+                # 找到 end 月份，如果只有一个 month-only，用 start month +1 年
+                end_m = months_only_matches[1] if len(months_only_matches) > 1 else months_only_matches[0]
+                end_date = f"{end_m} {start_y + 1}"
+            elif highlight_years:
+                end_date = f"{start_date.split()[0]} {max(highlight_years)}"
+            else:
+                end_date = "Present"
+
+        # --- 确保 end_date >= start_date ---
+        try:
+            start_m, start_y = start_date.split()
+            start_y = int(start_y)
+            if end_date.lower() != "present":
+                end_m, end_y = end_date.split()
+                end_y = int(end_y)
+                if end_y < start_y:
+                    end_y = start_y + 1
+                    end_date = f"{end_m} {end_y}"
+        except Exception:
+            pass
+
+        job["start_date"] = start_date
+        job["end_date"] = end_date
+
+    return work_experience
 
 # -----------------------
 # 测试 auto_fill_fields
