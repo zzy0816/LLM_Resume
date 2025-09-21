@@ -129,6 +129,7 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
     对所有类别支持字符串或 dict 输入，避免 AttributeError
     支持 N/A 前缀自动跳过
     """
+    
     base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
     new_structured = {
         "name": base_info.get("name"),

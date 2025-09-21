@@ -282,8 +282,6 @@ main.py 或 strealit run frontend.py
 # week 2
 1. 添加FASTAPI, 可以通过postman进行简历分析 和 追问
 2. 用streamlit做了一个简单的前端,用户可以通过前端上传本地文件到MINIO,以及提供分析和追问功能
-
-
 3. 优化: 
     - 1. fallback 增加关键词+全局语义模型
     - 2. 上传/下载时加上异常处理: 重试和缓存 
@@ -309,8 +307,8 @@ main.py 或 strealit run frontend.py
 
 # week 4
 1. 优化解决了上周的所有错误:
-  - 1. PDF问题: 现在删除了truncation参数, 在doc文件修改了文件读取逻辑,为docx添加donut, 为PDF添加LayoutLMv3 (现在PDF识别的解析还有一点小错误,工作经历部分的时间有"unkown",project也有一处描述分类错误)
-  - 2. project问题: 在utils文件添加了is_project_title,is_workline,parse_work_line...等等函数, 修改 parser解析文件, 可以识别并添加各工作经历和项目的描述部分
+  - 1. PDF问题: 现在删除了truncation参数, 在doc文件修改了文件读取逻辑,为docx添加donut, 为PDF添加LayoutLMv3(fallback为pdfplumber)
+  - 2. project问题: 在utils文件添加了is_project_title,is_workline,parse_work_line...等等函数, 修改 parser解析文件, 可以识别并添加各工作经历的描述部分和各个项目的标题并添加描述
   - 3. 名字问题: 修改pipline文件, 可以在存储faiss后用解析后恢复原解析结构
-  - 4. 其他优化: 解决以上问题之余的其他问题,如各个重要文件单独测试, 技能清理优化, 过滤条条件优化, 等
-  
+  - 4. 其他优化: 解决以上问题之余的其他问题,如各个重要文件单独测试, 技能清理优化, 过滤条条件优化, 日期处理fallback问题等
+  - 5. PDF的分割不太好,经常从中间分段,比如月+年,分成月一行,年一行,也许PDF2DOCX会更好
