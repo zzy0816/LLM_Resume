@@ -5,7 +5,7 @@ import logging
 import json
 import re
 from app.utils.files import save_json
-from app.qre.doc import read_document_paragraphs
+from app.qre.doc_read import read_document_paragraphs
 from app.test_tool.parser_test import parse_resume_to_structured 
 from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
 from app.storage.db import save_resume
