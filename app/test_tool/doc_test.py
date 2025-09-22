@@ -7,7 +7,6 @@ import pdfplumber
 from docx import Document as DocxDocument
 from difflib import SequenceMatcher
 import textwrap
-from pdf2docx import Converter
 
 # optional libs for layout / donut
 try:
@@ -212,77 +211,59 @@ def render_paragraphs_to_image(paragraphs: list[str], img_width: int = 1200, fon
 # 返回 list[str] 段落（不改变外部接口）
 # -------------------------
 def read_pdf_paragraphs(pdf_path: str):
-    """
-    PDF 解析优先级：
-    1. pdf2docx 转换 → 调用 read_docx_paragraphs（保证结构化）
-    2. LayoutLMv3（若可用）
-    3. pdfplumber fallback
-    """
-    paragraphs = []
-
-    # -------- 1. 优先 pdf2docx --------
-    if Converter is not None:
-        try:
-            temp_docx = pdf_path.replace(".pdf", "_tmp.docx")
-            cv = Converter(pdf_path)
-            cv.convert(temp_docx, start=0, end=None)
-            cv.close()
-
-            paragraphs = read_docx_paragraphs(temp_docx)
-
-            if paragraphs:
-                logger.info("PDF parsed by pdf2docx → DOCX, paragraphs=%d", len(paragraphs))
-                return paragraphs
-        except Exception as e:
-            logger.warning("pdf2docx failed, fallback to other methods. Error: %s", e)
-
-    # -------- 2. LayoutLMv3 --------
-    if USE_LAYOUTLM and fitz is not None:
-        try:
-            doc = fitz.open(pdf_path)
-            for page in doc:
-                pix = page.get_pixmap()
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-                words = page.get_text("words")
-                if not words:
-                    continue
-                words_text = [w[4] for w in words]
-                boxes = [normalize_box(w[0], w[1], w[2], w[3], page.rect.width, page.rect.height) for w in words]
-
-                encoding = layout_processor(
-                    images=img, words=words_text, boxes=boxes,
-                    return_tensors="pt", truncation=True, padding="max_length"
-                )
-                if DEVICE == "cuda":
-                    encoding = {k: v.to(DEVICE) for k, v in encoding.items()}
-
-                outputs = layout_model(**encoding)
-                token_preds = outputs.logits.argmax(-1)[0].cpu().tolist()
-                words_out = [words_text[i] for i in range(len(words_text)) if i < len(token_preds) and token_preds[i] > 0]
-                page_paras = [" ".join(words_out)]
-                paragraphs.extend(page_paras)
-
-            doc.close()
-            if paragraphs:
-                logger.info("PDF parsed by LayoutLMv3, paragraphs=%d", len(paragraphs))
-                return paragraphs
-        except Exception as e:
-            logger.warning("LayoutLMv3 failed, fallback to pdfplumber. Error: %s", e)
-
-    # -------- 3. pdfplumber fallback --------
-    try:
+    if not USE_LAYOUTLM or fitz is None:
+        # fallback 原逻辑
+        paragraphs = []
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
                 text = page.extract_text()
                 if text:
                     page_paras = [p.strip() for p in text.split("\n") if p.strip()]
                     paragraphs.extend(page_paras)
-        logger.info("PDF parsed by pdfplumber, paragraphs=%d", len(paragraphs))
-    except Exception as e:
-        logger.error("pdfplumber failed. Error: %s", e)
+        logger.info("PDF fallback split into %d paragraphs", len(paragraphs))
+        return paragraphs
 
-    return paragraphs
+    paragraphs = []
+    try:
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            # 渲染页面为图片
+            pix = page.get_pixmap()
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+
+            # 获取每个 word bbox
+            words = page.get_text("words")
+            if not words:
+                continue
+            words_text = [w[4] for w in words]
+            boxes = [normalize_box(w[0], w[1], w[2], w[3], page.rect.width, page.rect.height) for w in words]
+
+            encoding = layout_processor(images=img, words=words_text, boxes=boxes, return_tensors="pt", truncation=True, padding="max_length")
+            if DEVICE == "cuda":
+                encoding = {k: v.to(DEVICE) for k, v in encoding.items()}
+
+            outputs = layout_model(**encoding)
+
+            # decode logits → 获取 token text
+            token_preds = outputs.logits.argmax(-1)[0].cpu().tolist()
+            words_out = [words_text[i] for i in range(len(words_text)) if i < len(token_preds) and token_preds[i] > 0]
+            page_paras = [" ".join(words_out)]
+            paragraphs.extend(page_paras)
+
+        doc.close()
+        logger.info("PDF parsed by LayoutLMv3, paragraphs=%d", len(paragraphs))
+        return paragraphs
+
+    except Exception as e:
+        logger.warning("LayoutLMv3 failed, fallback to pdfplumber text. Error: %s", e)
+        paragraphs = []
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    page_paras = [p.strip() for p in text.split("\n") if p.strip()]
+                    paragraphs.extend(page_paras)
+        return paragraphs
 
 def normalize_box(x0, y0, x1, y1, page_width, page_height):
     """
