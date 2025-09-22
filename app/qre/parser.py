@@ -15,6 +15,8 @@ ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b"
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
 COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
 
+from app.qre.ner import run_ner_batch 
+
 def parse_resume_to_structured(paragraphs: List[str]) -> dict:
     paragraphs = preprocess_paragraphs(paragraphs)
 
@@ -28,6 +30,8 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
         "skills": [],
         "other": []
     }
+        
+    # -------- 1. 先用规则解析 --------
 
     current_section = None
     last_work = None
@@ -177,7 +181,33 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
             continue
         structured["other"].append(text)
 
-    # -------------------- 去重 & 默认值 --------------------
+    # -------- 2. 再跑 NER --------
+    ner_results = run_ner_batch(paragraphs)
+
+    for para_entities in ner_results:
+        for ent in para_entities:
+            label = ent["entity_group"]
+            text = ent["word"]
+
+            if label == "NAME" and not structured["name"]:
+                structured["name"] = text
+            elif label == "EMAIL" and not structured["email"]:
+                structured["email"] = text
+            elif label == "PHONE" and not structured["phone"]:
+                structured["phone"] = text
+            elif label == "SKILL":
+                structured["skills"].append(text)
+            elif label == "ORG":
+                # 如果当前解析的 work_experience 里没有公司，就补充
+                if structured["work_experience"]:
+                    last = structured["work_experience"][-1]
+                    if not last.get("company"):
+                        last["company"] = text
+            elif label in ["EDUCATION", "SCHOOL"]:
+                if not structured["education"] or not structured["education"][-1].get("school"):
+                    structured["education"].append({"school": text})
+
+    # -------------------- 3. 去重 & 默认值 --------------------
     structured["skills"] = sorted(set([s for s in structured["skills"] if s]))
     for we in structured["work_experience"]:
         we.setdefault("highlights", [])

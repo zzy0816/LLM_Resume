@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.utils.files import load_faiss
 from app.storage.db import load_resume
 from app.qre.query import query_dynamic_category
-from app.front.pipline import main_pipeline
+from app.pipline.pipline import main_pipeline
 from app.storage.storage_client import StorageClient
 
 logging.basicConfig(

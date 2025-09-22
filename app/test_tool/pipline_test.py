@@ -1,6 +1,9 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 import logging, json, re
 from app.utils.files import load_faiss, save_faiss, save_json, load_json
-from app.qre.doc import read_document_paragraphs
+from app.qre.doc_read import read_document_paragraphs
 from app.test_tool.parser_test import parse_resume_to_structured
 from app.utils.utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean, fix_resume_dates
 from app.test_tool.query_test import query_dynamic_category, fill_query_exact
@@ -202,7 +205,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 # 主函数
 # ------------------------
 if __name__ == "__main__":
-    files_to_process = ["Resume(AI).docx"]
+    files_to_process = ["Resume(AI).pdf"]
     all_results = main_pipeline(files_to_process, mode="exact")
     for user_email, structured_resume in all_results.items():
         logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")

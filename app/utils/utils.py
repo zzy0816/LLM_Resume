@@ -532,17 +532,17 @@ def fix_work_dates(work_experience: list) -> list:
 # -----------------------
 # 测试 auto_fill_fields
 # -----------------------
-# if __name__ == "__main__":
-#     test_resume = {
-#         "name": "Zhenyu Zhang",
-#         "email": "Zhang.zhenyu6@northeastern.edu",
-#         "phone": "+1860234-7101",
-#         "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
-#         "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
-#         "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
-#         "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
-#         "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
-#     }
+if __name__ == "__main__":
+    test_resume = {
+        "name": "Zhenyu Zhang",
+        "email": "Zhang.zhenyu6@northeastern.edu",
+        "phone": "+1860234-7101",
+        "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
+        "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
+        "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
+        "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
+        "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
+    }
 
-#     filled_resume = auto_fill_fields(test_resume)
-#     print("\nFinal structured resume:\n", filled_resume)
+    filled_resume = auto_fill_fields(test_resume)
+    print("\nFinal structured resume:\n", filled_resume)
