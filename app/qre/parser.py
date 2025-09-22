@@ -1,13 +1,12 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import re
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List
 
-from utils import preprocess_paragraphs, extract_email, extract_phone, is_work_line, parse_education_line, parse_work_line, is_project_title
+from app.utils.utils import preprocess_paragraphs, extract_email, extract_phone, is_work_line, parse_education_line, parse_work_line, is_project_title
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

@@ -1,66 +1,14 @@
 import logging, json, re
-from files import load_faiss, save_faiss, save_json, load_json
-from doc import read_document_paragraphs
-from parser_test import parse_resume_to_structured
-from utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean, fix_resume_dates
-from query_test import query_dynamic_category, fill_query_exact
-from db import save_resume
-
-from sentence_transformers import SentenceTransformer
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain.schema import Document as LC_Document
-from langchain_community.vectorstores import FAISS
+from app.utils.files import load_faiss, save_faiss, save_json, load_json
+from app.qre.doc import read_document_paragraphs
+from app.test_tool.parser_test import parse_resume_to_structured
+from app.utils.utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean, fix_resume_dates
+from app.test_tool.query_test import query_dynamic_category, fill_query_exact
+from app.storage.db import save_resume
+from app.qre.semantic import build_faiss
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-# ------------------------
-# FAISS 构建
-# ------------------------
-def build_faiss(structured_resume: dict, embeddings_model=None):
-    docs = []
-    user_email = structured_resume.get("email", "unknown")
-    logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {user_email}")
-
-    categories = ["work_experience", "projects", "education", "skills", "other"]
-
-    for cat in categories:
-        entries = structured_resume.get(cat, [])
-        if not entries:
-            continue
-
-        for i, entry in enumerate(entries):
-            text = ""
-            meta = {"category": cat}
-
-            # 文本构建
-            if cat == "projects" and isinstance(entry, dict):
-                title = entry.get("project_title") or entry.get("title") or ""
-                highlights = "\n".join(entry.get("highlights", []))
-                text = "\n".join([title, highlights]).strip()
-            elif isinstance(entry, dict):
-                text = entry.get("description") or ""
-                # 保存原始结构化字段到 metadata
-                for k in ["company","position","location","start_date","end_date",
-                          "school","degree","grad_date"]:
-                    if k in entry:
-                        meta[k] = entry[k]
-            elif isinstance(entry, str):
-                text = entry.strip()
-
-            if not text:
-                text = f"[{cat} 未提供内容]"
-
-            docs.append(LC_Document(page_content=text, metadata=meta))
-
-    if embeddings_model is None:
-        embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-    db = FAISS.from_documents(docs, embeddings_model)
-    logger.info(f"[FAISS INFO] FAISS DB built with {len(docs)} docs")
-    return db
 
 # ------------------------
 # 文件名 sanitize
@@ -254,7 +202,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 # 主函数
 # ------------------------
 if __name__ == "__main__":
-    files_to_process = ["Resume(AI).pdf"]
+    files_to_process = ["Resume(AI).docx"]
     all_results = main_pipeline(files_to_process, mode="exact")
     for user_email, structured_resume in all_results.items():
         logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")

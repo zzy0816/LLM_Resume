@@ -145,115 +145,84 @@ MINIO_BUCKET=resume-bucket
 main.py 或 strealit run frontend.py
 
 ===== FINAL STRUCTURED RESUME JSON for Zhang.zhenyu6@northeastern.edu =====
-2025-09-14 12:26:16,296 [INFO] {
-  "name": null,
+2025-09-22 10:19:13,553 [INFO] {
+  "name": "Zhenyu Zhang",
   "email": "Zhang.zhenyu6@northeastern.edu",
-  "phone": "+1860234-7101",
+  "phone": "+1 (860) 234-7101 ",
   "education": [
     {
       "school": "Northeastern University",
       "degree": "Master of Professional Study in Applied Machine Intelligence",
-      "grad_date": "April 2025",
-      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0。"
+      "grad_date": "2025",
+      "description": "Northeastern University | Master of Professional Study in Applied Machine Intelligence | Boston, MA | April 2025 | GPA: 3.9/4.0"
     },
     {
       "school": "University of Connecticut",
       "degree": "Bachelor of Art",
       "grad_date": "May 2022",
-      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022Skills。"
+      "description": "University of Connecticut | Bachelor of Art | Storrs, CT | May 2022 Skills"
     }
   ],
   "work_experience": [
     {
-      "company": "New York Technology & Management LLC",
-      "title": "Programming Manager",
-      "start_date": "May 2025",
-      "end_date": "Present",
-      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present。"
-    },
-    {
       "company": "Yangtze River Consulting Service LLC",
-      "title": "Ethical Consultant",
+      "position": "Ethical Consultant",
+      "location": "Piscataway Township, NJ",
       "start_date": "Sep 2022",
       "end_date": "Jul 2023",
-      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023。"
+      "description": "Yangtze River Consulting Service LLC | Ethical Consultant | Piscataway Township, NJ | Sep 2022 – Jul 2023",
+      "highlights": [
+        "Built a QA system with Transformer, improving automated question answering accuracy.",
+        "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.",
+        "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling."
+      ]
+    },
+    {
+      "company": "New York Technology & Management LLC",
+      "position": "Programming Manager",
+      "location": "New York, NY",
+      "start_date": "May 2025",
+      "end_date": "Present",
+      "description": "New York Technology & Management LLC | Programming Manager | New York, NY | May 2025 – Present",       
+      "highlights": [
+        "Built React agent with LangChain tool-calling to automate internal tool, reducing manual work.",
+        "Created a token counter in Ollama to efficiently track and manage token usage.",
+        "Built multi-agent system for sales and after-sales, streamlining communication and task flow.",
+        "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.",
+        "Built a LangChain agent to automate Gmail email tracking and improve communication.",
+        "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference."
+      ]
     }
   ],
   "projects": [
     {
-      "project_title": "Created a token counter in Ollama to efficiently track and m",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Created a token counter in Ollama to efficiently track and manage token usage.。"
+      "title": "Flower Market Assistant",
+      "highlights": [
+        "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.",
+        "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.",
+        "Increased online orders by 10% and reduced manual customer service workload by 40%."
+      ]
     },
     {
-      "project_title": "Fine-tuned and quantized Hugging Face model on custom data f",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Fine-tuned and quantized Hugging Face model on custom data for optimized, faster inference.。"
-    },
-    {
-      "project_title": "Built Ollama-based chatbot with memory, vector DB(FAISS), wi",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Built Ollama-based chatbot with memory, vector DB(FAISS), with LangChain and Flask.。"
-    },
-    {
-      "project_title": "Used Ollama to analyze files and generate PowerPoint reports",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Used Ollama to analyze files and generate PowerPoint reports, improving reporting workflows.。"
-    },
-    {
-      "project_title": "Built and deployed app for NGO to auto-publish messages via ",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Built and deployed app for NGO to auto-publish messages via AWS, boosting engagement 20%.。"
-    },
-    {
-      "project_title": "Built flower AI assistant to answer inquiries, boosting onli",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Built flower AI assistant to answer inquiries, boosting online sales and reducing workload.。"
-    },
-    {
-      "project_title": "Led COVID-19 time series and survey data analysis, focusing ",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Led COVID-19 time series and survey data analysis, focusing on cleaning, EDA, and modeling.。"
-    },
-    {
-      "project_title": "Built a QA system with Transformer, improving automated ques",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Built a QA system with Transformer, improving automated question answering accuracy.。"
-    },
-    {
-      "project_title": "Collected Bitfinex API data, trained transformer model with ",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": "Collected Bitfinex API data, trained transformer model with historical data, added vector database.。"
-    },
-    {
-      "project_title": "Using metal model to stack transformer model and sentiment model to get 84% accuracy.。",
-      "start_date": "Unknown",
-      "end_date": "Present",
-      "project_content": ""
+      "title": "Crypto Predicted and Analysis with Vester AI",
+      "highlights": [
+        "Built a Crypto analysis tool with transformer model and LLM for Realtime market prediction.",
+        "Collected Bitfinex API data, trained transformer model with historical data, added vector database.",
+        "Using metal model to stack transformer model and sentiment model to get 84% accuracy."
+      ]
     }
   ],
   "skills": [
-    "HuggingFace",
-    "LangChain",
-    "NumPy",
-    "Ollama",
-    "Pandas",
-    "PyTorch",
     "Python",
-    "SQL",
-    "Scikit-learn",
-    "Seaborn",
     "Tableau",
-    "TensorFlow"
+    "SQL",
+    "TensorFlow",
+    "Pytorch",
+    "Scikit-learn",
+    "Pandas",
+    "NumPy",
+    "Seaborn",
+    "Langchain"
   ],
   "other": []
 }
@@ -314,6 +283,6 @@ main.py 或 strealit run frontend.py
   - 5. PDF的分割不太好,经常从中间分段,比如月+年,分成月一行,年一行,也许PDF2DOCX会更好
 
 # week 5
-1. 升级: PDF兼容OCR,
+1. 项目结构, 代码清理
 2. logging 日志, lazy loading 和sigleton(必须) CI/CD pipline (GITHUB action), 项目分割, 代码冗余...
-3. ...
+3. 升级: PDF兼容OCR, LLM.CPP

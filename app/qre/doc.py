@@ -1,11 +1,9 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import logging
 import re
 import pdfplumber
-from dotenv import load_dotenv
 from docx import Document as DocxDocument
 from difflib import SequenceMatcher
 import textwrap
@@ -115,8 +113,6 @@ def read_docx_paragraphs(docx_path: str):
     else:
         logger.info("DOCX split into %d paragraphs", len(paragraphs))
     return paragraphs
-
-
 
 def merge_semantic_paragraphs(text: str):
     """

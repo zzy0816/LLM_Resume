@@ -1,14 +1,11 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import logging
 import json
-from files import load_json, save_json, load_faiss, save_faiss
-from query_test import query_dynamic_category, fill_query_exact
-from utils import rule_based_filter, validate_and_clean
-from pipline_test import restore_parsed_structure
-from db import save_resume
+from app.test_tool.query_test import query_dynamic_category, fill_query_exact
+from app.utils.utils import rule_based_filter, validate_and_clean
+from app.test_tool.pipline_test import restore_parsed_structure
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings

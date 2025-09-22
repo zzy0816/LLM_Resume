@@ -1,16 +1,15 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import logging
 from typing import Union, List
 from fastapi import FastAPI
 from pydantic import BaseModel
-from files import load_faiss
-from db import load_resume
-from query import query_dynamic_category
-from pipline import main_pipeline
-from storage_client import StorageClient
+from app.utils.files import load_faiss
+from app.storage.db import load_resume
+from app.qre.query import query_dynamic_category
+from app.front.pipline import main_pipeline
+from app.storage.storage_client import StorageClient
 
 logging.basicConfig(
     level=logging.INFO,

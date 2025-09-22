@@ -1,5 +1,17 @@
 import re
 import logging
+from typing import List, Optional, Tuple
+
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
+
+ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
+POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
+COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
+
+
+POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
+COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
 
 # -------------------------
 # 分类段落
@@ -199,13 +211,10 @@ def rule_based_filter(category: str, items: list) -> list[str]:
         
         text_low = text.lower()
         if any(k.lower() in text_low for k in keywords.get(category, [])):
-            filtered.append(text)  # 注意这里返回的是字符串，而不是 dict
+            filtered.append(text)  # 这里返回的是字符串，而不是 dict
 
     return filtered
 
-from copy import deepcopy
-
-# utils.py 中新增
 def merge_dicts(d1: dict, d2: dict) -> dict:
     """
     深度合并两个字典。
@@ -229,17 +238,6 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
             result[key] = value
     return result
 
-import re
-import logging
-from typing import List, Optional, Tuple
-
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
-
-ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
-POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
-COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
-
 def preprocess_paragraphs(paragraphs: List[str]) -> List[str]:
     out = []
     for p in paragraphs:
@@ -260,16 +258,7 @@ def extract_phone(text: str) -> Optional[str]:
     candidates = re.findall(r'(\+?\d[\d\-\s\(\)]{6,}\d)', text)
     return max([c.strip() for c in candidates], key=len) if candidates else None
 
-import re
-from typing import Tuple, Optional
-
-POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
-COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
-
 # ----------------- 日期解析 -----------------
-from typing import Optional, Tuple
-import re
-
 def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
     """
     支持 'Sep 2022 – Jul' 或 'Jun 2021 – Aug 2022' 或 'May 2025 – Present'。
@@ -543,17 +532,17 @@ def fix_work_dates(work_experience: list) -> list:
 # -----------------------
 # 测试 auto_fill_fields
 # -----------------------
-if __name__ == "__main__":
-    test_resume = {
-        "name": "Zhenyu Zhang",
-        "email": "Zhang.zhenyu6@northeastern.edu",
-        "phone": "+1860234-7101",
-        "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
-        "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
-        "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
-        "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
-        "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
-    }
+# if __name__ == "__main__":
+#     test_resume = {
+#         "name": "Zhenyu Zhang",
+#         "email": "Zhang.zhenyu6@northeastern.edu",
+#         "phone": "+1860234-7101",
+#         "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
+#         "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
+#         "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
+#         "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
+#         "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
+#     }
 
-    filled_resume = auto_fill_fields(test_resume)
-    print("\nFinal structured resume:\n", filled_resume)
+#     filled_resume = auto_fill_fields(test_resume)
+#     print("\nFinal structured resume:\n", filled_resume)

@@ -1,10 +1,9 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 import logging
 import re
-from utils import normalize_category, normalize_skills, extract_skills_from_text
+from app.utils.utils import normalize_category, extract_skills_from_text
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,7 +111,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import logging
 import re
-from utils import normalize_category, normalize_skills, extract_skills_from_text
+from app.utils.utils import normalize_category, normalize_skills, extract_skills_from_text
 
 logging.basicConfig(
     level=logging.INFO,

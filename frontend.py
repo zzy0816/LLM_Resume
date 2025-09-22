@@ -2,7 +2,7 @@
 import os
 import requests
 import streamlit as st
-from scripts.storage_client import StorageClient
+from app.storage.storage_client import StorageClient
 
 # -----------------------------
 # 基础初始化

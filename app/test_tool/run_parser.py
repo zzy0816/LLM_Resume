@@ -1,11 +1,11 @@
 import logging
 import json
 import re
-from files import save_json
-from doc import read_document_paragraphs
-from parser_test import parse_resume_to_structured 
-from utils import auto_fill_fields, extract_basic_info, validate_and_clean
-from db import save_resume
+from app.utils.files import save_json
+from app.qre.doc import read_document_paragraphs
+from app.test_tool.parser_test import parse_resume_to_structured 
+from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
+from app.storage.db import save_resume
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,8 +59,6 @@ def make_safe_for_mongo(obj):
                 return "[Unserializable]"
 
     return _sanitize(obj)
-
-import re
 
 def fix_resume_dates(structured_resume: dict) -> dict:
     """
