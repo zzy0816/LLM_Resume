@@ -312,3 +312,8 @@ main.py 或 strealit run frontend.py
   - 3. 名字问题: 修改pipline文件, 可以在存储faiss后用解析后恢复原解析结构
   - 4. 其他优化: 解决以上问题之余的其他问题,如各个重要文件单独测试, 技能清理优化, 过滤条条件优化, 日期处理fallback问题等
   - 5. PDF的分割不太好,经常从中间分段,比如月+年,分成月一行,年一行,也许PDF2DOCX会更好
+
+# week 5
+1. 升级: PDF兼容OCR,
+2. logging 日志, lazy loading 和sigleton(必须) CI/CD pipline (GITHUB action), 项目分割, 代码冗余...
+3. ...
