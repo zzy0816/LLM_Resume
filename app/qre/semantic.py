@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 import logging
 from sentence_transformers import SentenceTransformer
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -6,7 +9,26 @@ from langchain_community.vectorstores import FAISS
 
 logger = logging.getLogger(__name__)
 
-semantic_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+class SemanticModelSingleton:
+    """懒加载 + 单例 SentenceTransformer / Embeddings"""
+    _sentence_model = None
+    _embeddings_model = None
+
+    @classmethod
+    def get_sentence_model(cls):
+        if cls._sentence_model is None:
+            logger.info("Loading SentenceTransformer model for the first time...")
+            cls._sentence_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+            logger.info("SentenceTransformer loaded.")
+        return cls._sentence_model
+
+    @classmethod
+    def get_embeddings_model(cls):
+        if cls._embeddings_model is None:
+            logger.info("Loading HuggingFaceEmbeddings model for the first time...")
+            cls._embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            logger.info("HuggingFaceEmbeddings loaded.")
+        return cls._embeddings_model
 
 # ------------------------
 # FAISS 构建
@@ -27,14 +49,12 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
             text = ""
             meta = {"category": cat}
 
-            # 文本构建
             if cat == "projects" and isinstance(entry, dict):
                 title = entry.get("project_title") or entry.get("title") or ""
                 highlights = "\n".join(entry.get("highlights", []))
                 text = "\n".join([title, highlights]).strip()
             elif isinstance(entry, dict):
                 text = entry.get("description") or ""
-                # 保存原始结构化字段到 metadata
                 for k in ["company","position","location","start_date","end_date",
                           "school","degree","grad_date"]:
                     if k in entry:
@@ -48,11 +68,17 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
             docs.append(LC_Document(page_content=text, metadata=meta))
 
     if embeddings_model is None:
-        embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings_model = SemanticModelSingleton.get_embeddings_model()
 
     db = FAISS.from_documents(docs, embeddings_model)
     logger.info(f"[FAISS INFO] FAISS DB built with {len(docs)} docs")
     return db
+
+# ------------------------
+# 获取 SentenceTransformer 实例（可直接复用）
+# ------------------------
+def get_sentence_model():
+    return SemanticModelSingleton.get_sentence_model()
 
 if __name__ == "__main__":
     import pprint
@@ -89,6 +115,6 @@ if __name__ == "__main__":
 
     # 查询测试
     test_query = "work_experience"
-    from app.qre.query import query_dynamic_category
+    from app.pipline.query import query_dynamic_category
     results = query_dynamic_category(db, test_resume, test_query, top_k=3)
     pprint.pprint(results)

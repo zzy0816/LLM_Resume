@@ -1,6 +1,4 @@
 import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
 import logging
 import pdfplumber
 from docx import Document as DocxDocument
@@ -9,7 +7,6 @@ from PIL import Image
 import torch
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from transformers import DonutProcessor, VisionEncoderDecoderModel
-from app.qre.doc_split import render_paragraphs_to_image  # 避免循环引用
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -64,6 +61,7 @@ def _load_donut():
 # DOCX 读取
 # -------------------------
 def read_docx_paragraphs(docx_path: str):
+    from doc_split_test import render_paragraphs_to_image  # 避免循环引用
     paragraphs = [p.text.strip() for p in DocxDocument(docx_path).paragraphs if p.text.strip()]
 
     donut_processor, donut_model, USE_DONUT = _load_donut()

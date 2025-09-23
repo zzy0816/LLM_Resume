@@ -128,7 +128,12 @@ def restore_work_experience(structured_resume, parsed_resume, faiss_results):
 # ------------------------
 # 主 pipeline
 # ------------------------
-def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]:
+def main_pipeline(file_names: list[str], mode: str = "exact", use_cache: bool = True) -> dict[str, dict]:
+    """
+    file_names: 要处理的文件列表
+    mode: exact 或其他模式
+    use_cache: 是否优先使用缓存 JSON，如果 False 则强制重新解析
+    """
     results = {}
 
     for file_name in file_names:
@@ -136,9 +141,12 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
         logger.info(f"[PIPELINE] Processing file {file_name}")
         safe_name = sanitize_filename(file_name)
 
-        structured_resume = load_json(safe_name)
+        structured_resume = load_json(safe_name) if use_cache else None
         parsed_resume = structured_resume.copy() if structured_resume else {}
 
+        # -----------------
+        # 如果没有缓存或不使用缓存，重新解析文档
+        # -----------------
         if structured_resume is None:
             paragraphs = read_document_paragraphs(file_path)
             full_text = "\n".join(paragraphs)
@@ -165,6 +173,9 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 
         user_email = structured_resume.get("email") or safe_name
 
+        # -----------------
+        # FAISS 构建/查询
+        # -----------------
         db = load_faiss(safe_name)
         if db is None:
             logger.info(f"[PIPELINE] FAISS not found, building for {safe_name}")
@@ -180,24 +191,29 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
                 filtered = rule_based_filter(q, res.get("results", []))
                 query_results[q] = filtered
 
+        # -----------------
+        # 数据回填与清洗
+        # -----------------
         structured_resume = fill_query_exact(structured_resume, query_results, parsed_resume)
         structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
         structured_resume = restore_work_experience(structured_resume, parsed_resume, query_results)
         structured_resume = validate_and_clean(structured_resume)
         structured_resume = fix_resume_dates(structured_resume)
-
         structured_resume["skills"] = clean_skills(query_results.get("技能", []) or structured_resume.get("skills", []))
-
         structured_resume["other"] = [
             {"description": str(entry.get("description", ""))} if isinstance(entry, dict) else {"description": str(entry)}
             for entry in structured_resume.get("other", [])
         ]
 
+        # -----------------
+        # 保存结果
+        # -----------------
         save_resume(user_id=user_email, file_name=safe_name + "_faiss_confirmed", data=structured_resume)
         save_json(safe_name + "_faiss_confirmed", structured_resume)
         logger.info(f"[PIPELINE] Saved resume for {user_email}")
 
-        results[user_email] = structured_resume
+        safe_name = sanitize_filename(file_name)
+        results[safe_name] = structured_resume
 
     return results
 
@@ -205,8 +221,9 @@ def main_pipeline(file_names: list[str], mode: str = "exact") -> dict[str, dict]
 # 主函数
 # ------------------------
 if __name__ == "__main__":
-    files_to_process = ["Resume(AI).pdf"]
+    files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
     all_results = main_pipeline(files_to_process, mode="exact")
-    for user_email, structured_resume in all_results.items():
-        logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")
+    
+    for file_name, structured_resume in all_results.items():
+        logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} =====")
         logger.info(json.dumps(structured_resume, ensure_ascii=False, indent=2))

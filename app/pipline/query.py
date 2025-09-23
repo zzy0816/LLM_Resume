@@ -101,26 +101,8 @@ def query_all_categories(db, structured_resume, top_k=10):
             all_results[q] = []
     return all_results
 
-
 # -------------------------
-# 填充结构化 JSON（安全版）
-# -------------------------
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-import logging
-import re
-from app.utils.utils import normalize_category, normalize_skills, extract_skills_from_text
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-logger = logging.getLogger(__name__)
-
-# -------------------------
-# 安全版填充函数
+# 填充函数
 # -------------------------
 def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict = None) -> dict:
     """

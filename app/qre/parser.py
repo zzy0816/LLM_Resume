@@ -6,7 +6,16 @@ import json
 import logging
 from typing import List
 
-from app.utils.utils import preprocess_paragraphs, extract_email, extract_phone, is_work_line, parse_education_line, parse_work_line, is_project_title
+from app.utils.utils import (
+    preprocess_paragraphs,
+    extract_email,
+    extract_phone,
+    is_work_line,
+    parse_education_line,
+    parse_work_line,
+    is_project_title,
+)
+from app.qre.ner import run_ner_batch 
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -15,7 +24,6 @@ ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b"
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
 COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
 
-from app.qre.ner import run_ner_batch 
 
 def parse_resume_to_structured(paragraphs: List[str]) -> dict:
     paragraphs = preprocess_paragraphs(paragraphs)

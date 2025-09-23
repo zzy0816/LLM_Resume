@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from app.utils.files import load_faiss
 from app.storage.db import load_resume
-from app.qre.query import query_dynamic_category
+from app.pipline.query import query_dynamic_category
 from app.pipline.pipline import main_pipeline
 from app.storage.storage_client import StorageClient
 
@@ -52,10 +52,16 @@ def analyze_resume(req: ResumeRequest):
     # 调用批量处理主流程
     all_results = main_pipeline(file_list, mode="exact")
 
-    # 生成报告（按类别汇总）
+    # 生成报告（按文件名+邮箱汇总）
     reports = {}
-    for user_email, structured_resume in all_results.items():
-        reports[user_email] = {
+    for file_name, structured_resume in all_results.items():
+        key = f"{file_name} ({structured_resume.get('email', 'N/A')})"  # 文件名+邮箱
+        reports[key] = {
+            "basic_info": {
+                "name": structured_resume.get("name", "N/A"),
+                "email": structured_resume.get("email", "N/A"),
+                "phone": structured_resume.get("phone", "N/A"),
+            },
             "work_experience": structured_resume.get("work_experience", []),
             "projects": structured_resume.get("projects", []),
             "education": structured_resume.get("education", []),

@@ -89,6 +89,6 @@ if __name__ == "__main__":
 
     # 查询测试
     test_query = "work_experience"
-    from app.qre.query import query_dynamic_category
+    from app.pipline.query import query_dynamic_category
     results = query_dynamic_category(db, test_resume, test_query, top_k=3)
     pprint.pprint(results)
