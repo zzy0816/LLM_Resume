@@ -1,0 +1,10 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /logs/*.log       # 注意这里是容器里的路径，不是 Windows 路径
+    json.keys_under_root: true
+    json.add_error_key: true
+
+output.logstash:
+  hosts: ["logstash:5044"]

@@ -286,6 +286,6 @@ main.py 或 strealit run frontend.py
 1. 项目结构, 代码清理, 项目分割, 代码冗余... (完成)
 2. lazy loading 和sigleton(完成)
 3. pipline/main,可以一次处理多个文件,每个文件的结构化数据都有显示(完成)
-4. 统一logging 日志
+4. 统一logging 日志 (ELK)
 5. CI/CD pipline (GITHUB action)
 6. 升级: PDF兼容OCR, LLM.CPP (暂时不用)

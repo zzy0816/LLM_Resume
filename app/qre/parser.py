@@ -16,9 +16,29 @@ from app.utils.utils import (
     is_project_title,
 )
 from app.qre.ner import run_ner_batch 
+import logging, json, random, time, os
 
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(message)s")
-logger = logging.getLogger(__name__)
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "service": "ner_service",
+            "message": record.getMessage(),
+            "request_id": str(random.randint(1000, 9999))
+        }
+        return json.dumps(log)
+
+# 确保 logs 目录存在
+os.makedirs("logs", exist_ok=True)
+
+# 设置日志 handler
+handler = logging.FileHandler("logs/app.log")
+handler.setFormatter(JsonFormatter())
+
+logger = logging.getLogger()  # root logger
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
 POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
