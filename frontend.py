@@ -1,8 +1,33 @@
-# frontend.py  (aka streamlit_app.py)
-import os
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 import requests
 import streamlit as st
 from app.storage.storage_client import StorageClient
+
+import logging, json, random, time, os
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "service": "ner_service",
+            "message": record.getMessage(),
+            "request_id": str(random.randint(1000, 9999))
+        }
+        return json.dumps(log)
+
+# 确保 logs 目录存在
+os.makedirs("logs", exist_ok=True)
+
+# 设置日志 handler
+handler = logging.FileHandler("logs/app.log")
+handler.setFormatter(JsonFormatter())
+
+logger = logging.getLogger()  # root logger
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 # -----------------------------
 # 基础初始化
@@ -53,18 +78,23 @@ if st.session_state.mode == "MinIO 文件":
             st.error(f"读取 MinIO 文件列表失败：{e}")
 
     if objects:
-        # 只展示 .docx 文件（可按需放开）
-        docx_objects = [k for k in objects if k.lower().endswith(".docx")] or objects
-        selected = st.selectbox("选择已有文件", docx_objects, index=0 if st.session_state.file_name == "" else
-                                max(0, docx_objects.index(st.session_state.file_name)) if st.session_state.file_name in docx_objects else 0)
+        # 展示 .docx 和 .pdf 文件
+        valid_objects = [k for k in objects if k.lower().endswith((".docx", ".pdf"))] or objects
+        selected = st.selectbox(
+            "选择已有文件",
+            valid_objects,
+            index=0 if st.session_state.file_name == "" else
+                max(0, valid_objects.index(st.session_state.file_name)) if st.session_state.file_name in valid_objects else 0
+        )
         st.session_state.file_name = selected
-        st.session_state.local_path = None   # 还未下载
+        st.session_state.local_path = None
+
     else:
         st.warning("MinIO 中没有文件，请先上传（或切换到“上传本地文件”）。")
 
 # ====== 上传本地文件模式 ======
 else:
-    uploaded_file = st.file_uploader("上传简历（.docx）", type=["docx"])
+    uploaded_file = st.file_uploader("上传简历（.docx/.pdf）", type=["docx", "pdf"])
     if uploaded_file is not None:
         # 先写到本地
         local_path = os.path.join(DOWNLOADS_DIR, uploaded_file.name)
@@ -114,6 +144,9 @@ def _download_from_minio_to_local(key: str) -> str | None:
         st.error(f"下载 {key} 失败：{e}")
         return None
 
+# -----------------------------
+# 分析简历
+# -----------------------------
 if st.button("分析简历"):
     # 前置校验
     if st.session_state.mode == "MinIO 文件":
@@ -139,7 +172,7 @@ if st.button("分析简历"):
         try:
             resp = requests.post(
                 "http://127.0.0.1:8000/analyze_resume",
-                json={"file_name": st.session_state.file_name},
+                json={"file_names": [st.session_state.file_name]},  # ✅ 改这里
                 timeout=60
             )
         except requests.exceptions.ConnectionError as e:
@@ -157,16 +190,16 @@ if st.button("分析简历"):
         else:
             try:
                 data = resp.json()
-                report = data.get("report", {})
+                reports = data.get("reports", {})
             except Exception as e:
                 st.error(f"返回内容非 JSON 或解析失败：{e}\n原始内容：{resp.text[:500]}")
                 st.stop()
 
             st.success("✅ 简历分析完成")
-            if not report:
+            if not reports:
                 st.warning("后端未返回 report 字段或为空。")
             else:
-                for cat, text in report.items():
+                for cat, text in reports.items():
                     st.subheader(cat)
                     st.json(text)
 

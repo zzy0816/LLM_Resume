@@ -1,0 +1,4 @@
+{"timestamp": "2025-09-23 20:30:48,900", "level": "INFO", "service": "ner_service", "message": "Uploaded D:\\project\\LLM_Resume\\data\\Resume(AI).docx as Resume(AI).docx", "request_id": "3542"}
+{"timestamp": "2025-09-23 20:30:48,967", "level": "INFO", "service": "ner_service", "message": "Uploaded D:\\project\\LLM_Resume\\data\\Resume(AI).pdf as Resume(AI).pdf", "request_id": "3677"}
+{"timestamp": "2025-09-23 20:30:48,967", "level": "INFO", "service": "ner_service", "message": "Upload summary: {'D:\\\\project\\\\LLM_Resume\\\\data\\\\Resume(AI).docx': True, 'D:\\\\project\\\\LLM_Resume\\\\data\\\\Resume(AI).pdf': True}", "request_id": "9226"}
+{"timestamp": "2025-09-23 20:30:48,967", "level": "INFO", "service": "ner_service", "message": "Using cached file: D:\\project\\LLM_Resume\\downloads\\Resume(AI).pdf", "request_id": "5006"}

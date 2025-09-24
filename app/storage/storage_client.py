@@ -120,11 +120,11 @@ if __name__ == "__main__":
 
     files_to_upload = [
         r"D:\project\LLM_Resume\data\Resume(AI).docx",
-        r"D:\project\LLM_Resume\data\Resume(DS)v0.1.docx"
+        r"D:\project\LLM_Resume\data\Resume(AI).pdf"
     ]
 
     # 上传多个文件
     client.upload_files(files_to_upload)
 
     # 读取其中一个文件
-    client.read_file("Resume(AI).docx", r"D:\project\LLM_Resume\downloads\Resume(AI).docx")
+    client.read_file("Resume(AI).docx", r"D:\project\LLM_Resume\downloads\Resume(AI).pdf")

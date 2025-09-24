@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from app.utils.files import load_faiss
 from app.storage.db import load_resume
-from app.pipline.query import query_dynamic_category
+from app.qre.query import query_dynamic_category
 from app.pipline.pipline import main_pipeline
 from app.storage.storage_client import StorageClient
 import logging, json, random, time, os
@@ -58,6 +58,9 @@ class QueryRequest(BaseModel):
 # -------------------------
 # 分析简历接口
 # -------------------------
+class ResumeRequest(BaseModel):
+    file_names: Union[str, List[str]]  # 单文件或列表
+
 @app.post("/analyze_resume")
 def analyze_resume(req: ResumeRequest):
     """

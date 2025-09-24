@@ -54,7 +54,7 @@ try {
 # -----------------------------
 Write-Output "[INIT] Running Python script..."
 Set-Location $ProjectRoot
-python ".\app\pipline\pipline.py"
+python ".\app\pipline\main.py"
 
 Write-Output "[DONE] Initialization complete!"
 Write-Output "Open Kibana: http://localhost:5601"
