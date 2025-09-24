@@ -325,6 +325,7 @@ def main_pipeline(
 
 from unittest.mock import patch
 import logging
+import pytest
 
 # 关闭不必要的日志输出
 logging.basicConfig(level=logging.ERROR)
@@ -332,10 +333,7 @@ logging.basicConfig(level=logging.ERROR)
 def test_main_pipeline_runs():
     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
 
-    # mock 所有外部依赖，避免真实 I/O 和 DB
     with patch("app.test_tool.pipline_test.save_resume") as mock_save, \
-         patch("app.test_tool.pipline_test.load_faiss", return_value=None), \
-         patch("app.test_tool.pipline_test.build_faiss", return_value="FAISS_DB"), \
          patch("app.test_tool.pipline_test.save_faiss") as mock_save_faiss, \
          patch("app.test_tool.pipline_test.read_document_paragraphs", return_value=["Dummy text"]), \
          patch("app.test_tool.pipline_test.parse_resume_to_structured", return_value={
@@ -349,7 +347,7 @@ def test_main_pipeline_runs():
          patch("app.test_tool.pipline_test.validate_and_clean", side_effect=lambda x: x), \
          patch("app.test_tool.pipline_test.fix_resume_dates", side_effect=lambda x: x), \
          patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x), \
-         patch("pymongo.MongoClient"):
+         patch("pymongo.MongoClient"):  # 屏蔽真实 MongoDB
 
         mock_save.return_value = None
         mock_save_faiss.return_value = None
@@ -369,12 +367,11 @@ def test_main_pipeline_runs():
 # 可以在本地运行测试
 # ------------------------
 if __name__ == "__main__":
-    import pytest
     pytest_args = [
         __file__,
-        "-q",                  # 安静模式，只显示简洁输出
-        "--disable-warnings",  # 过滤 DeprecationWarning / UserWarning
-        "--tb=short"           # 只显示短 traceback
+        "-q",                  # 安静模式
+        "--disable-warnings",  # 过滤警告
+        "--tb=short"           # 简洁 traceback
     ]
     pytest.main(pytest_args)
 
