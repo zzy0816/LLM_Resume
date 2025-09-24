@@ -1,6 +1,7 @@
 # LLM Resume Analysis Project
 
-基于 FastAPI 的简历上传与分析系统，使用本地 MinIO 存储简历文件，可扩展到 AWS S3。  
+一个基于 **NER 模型** 和 **FastAPI** 的简历分析系统，用于自动解析上传的简历文件，提取结构化信息并存储到 **MongoDB**。  
+项目支持本地 **MinIO** 文件存储，并可轻松扩展到 **AWS S3**。系统特点包括高准确率的实体识别、灵活的 API 接口以及可扩展的数据存储方案。  
 
 ---
 
@@ -9,8 +10,7 @@
 - [项目简介](#项目简介) 
 - [项目目录结构](#项目目录结构)  
 - [环境要求](#环境要求)  
-- [安装与配置](#安装与配置)  
-- [运行 MinIO](#运行-minio)  
+- [安装与配置](#安装与配置)
 - [上传&下载文件](#上传&下载文件)  
 - [文件分段分类抓取](#文件分段分类抓取)  
 - [切换 AWS S3](#切换-aws-s3)  
@@ -38,7 +38,7 @@
    [读取文件内容]
           │
           ▼
-   [NER 模型 分析]
+   [NER 模型 及 规则化 分析]
           │
           ▼
       [返回结果给用户]
@@ -52,6 +52,15 @@ LLM_Resume_Project/
 ├── requirements.txt
 ├── frontend.py             # streamlit 了一个简单的前端
 ├── minio_data/             # 本地 MinIO 数据挂载目录
+├── .github/                # GITHUB ACTION 的 CI/CD 运行脚本 
+├── logs/                   # 日志
+├── elk/                    # elastic,logstash, Kibana, 
+    ├── filebeat.yml 设置filebeat 可以Kibana查看日志
+    ├── logstash.conf 设置logstash 可以Kibana查看日志
+    └── init.ps1 启动elk 可以自动记录日志
+├── auto_format.py/         # 代码风格正式化
+├── fronted.py/             # streanlit 前端代码
+├── docker-compose.yml/     # docker下载启动MINIO(S3数据储存), ELK(elastksearch,filebeat,logstash,kibana)
 ├── data/                   # 本地测试简历文件存放目录
     ├── classified 各个文件的json缓存
     ├── faiss 各个文件的faiss缓存
@@ -61,27 +70,40 @@ LLM_Resume_Project/
 ├── downloads/              # 储存从MINIO下载到本地的文件
     ├── Resume(AI).docx
     └── Resume(DS)v0.1.docx
-└── scripts/               
-    ├── upload_llm.py       # 原脚本, t0,t1同为原脚本
-    ├── db.py               # mongodb上传
-    ├── doc.py              # 读取 doc/pdf 文件, faiss分段, 去重/归一化
-    ├── files.py            # 加载读取 json, embed, faiss 文件
-    ├── ner.py              # 加载ner模型
-    ├── parser.py           # 分类和结构化
-    ├── query.py            # 查询分类段落和覆盖结构化json
-    ├── semantic.py         # build_faiss 生成faiss的
-    ├── utils_parser.py     # 因为semantic_fallback涉及其他模块,放utils会造成循环调用,故隔离开
-    ├── utils.py            # 各种不涉及其他模块的辅助工具
-    ├── pipline.py          # 总流程
+└── app/
     ├── main.py             # 使用fastAPI后台脚本
-    └── storage_client.py   # 上传和下载简历（可用 boto3）
+    ├── pipline/              
+        └── pipline.py          # 总流程 
+    ├── qre/                    # 解析合集
+        ├── doc_read.py         # 读取 doc/pdf 文件
+        ├── doc_split.py        # faiss分段, 去重/归一化
+        ├── ner.py              # 加载ner模型
+        ├── parser.py           # 分类和结构化
+        ├── query.py            # 查询分类段落和覆盖结构化json
+        └── semantic.py         # build_faiss 生成faiss的
+    ├── storage/              
+        ├── db.py               # mongodb上传
+        └── storage_client.py   # 上传和下载简历（可用 boto3）
+    ├── test_tool/              # 各个函数的单独测试
+        ├── doc_read_test.py        
+        ├── doc_split_test.py        
+        ├── ner_test.py              
+        ├── parser_test.py           
+        ├── query_test.py
+        ├── pipline_test.py
+        ├── run_parser.py       #测试总流程中到解析为止的部分
+        ├── run_faiss.py        #测试总流程中解析后, faiss为主的部分    
+        └── semantic_test.py         
+    └── utils/              # 储存从MINIO下载到本地的文件
+        ├── utils.py            # 各种不涉及其他模块的辅助工具
+        └── utils_parser.py     # 因为semantic_fallback涉及其他模块,放utils会造成循环调用,故隔离开                  
 
 ---
 
 ## 环境要求
 - Python >= 3.10  
 - 依赖库：`boto3`、`fastapi`、`python-dotenv`、`uvicorn` 等  
-- Docker Desktop（用于运行 MinIO 容器）  
+- Docker Desktop（用于运行 MinIO 以及 ELK 容器）  
 
 ---
 
@@ -94,18 +116,6 @@ MINIO_BUCKET=resume-bucket
 
 2. 安装 Python 依赖：
 pip install -r requirements.txt
-
-## 运行 MinIO
-在 Windows PowerShell 中运行：
-
-& "C:\Program Files\Docker\Docker\resources\bin\docker.exe" run -p 9000:9000 -p 9001:9001 `
-  -e "MINIO_ROOT_USER=admin" `
-  -e "MINIO_ROOT_PASSWORD=admin123" `
-  -v D:\project\LLM_Resume\minio_data:/data `
-  quay.io/minio/minio server /data --console-address ":9001"
-
-Web 控制台访问：http://localhost:9001
-默认用户名/密码：admin / admin123
 
 ---
 
@@ -120,12 +130,11 @@ Web 控制台访问：http://localhost:9001
 简历处理主流程：
 1. 读取 Word 段落
 2. 段落语义拆分
-3. 正则兜底邮箱,电话等等
-4. 自定义结构化JSON
-5. 用NER解析成结构化字典
-6. 自动补全缺失字段
-7. 如果提供 FAISS，则进行语义补全
-8. 返回最终结构化字典
+3. 自定义结构化JSON
+4. 正则兜底邮箱,电话等;设定规则解析
+5. 用NER解析补充缺失部分
+6. 存储为FAISS
+7. 返回最终结构化JSON
 
 ---
 
@@ -234,10 +243,7 @@ main.py 或 strealit run frontend.py
 .env 管理密钥信息，不要硬编码在脚本中
 
 ## 更新目标
-1. 目前的简历分析抓取中设置了分类, 未来也许可以考虑完全去除手动设置,全自动分析(已实现)
-2. FASTAPI:用户可以在前端(PostMan)选择文件,查看文件分析结果,适当追问,等等 (已实现)
-3. 继续优化LLM的分析能力 (已实现: 数据结构化+NER模型抽取+正则兜底)
-4. 继续强化这三步: 更多结构化内容+抽取更完善(不再从中截断)+正则兜底
+1. 升级: PDF兼容OCR, NER模型更换LLM.CPP或OPENAI (暂时不用)
 
 ## 每周更新
 
@@ -283,9 +289,9 @@ main.py 或 strealit run frontend.py
   - 5. PDF的分割不太好,经常从中间分段,比如月+年,分成月一行,年一行,也许PDF2DOCX会更好
 
 # week 5
-1. 项目结构, 代码清理, 项目分割, 代码冗余... (完成)
-2. lazy loading 和sigleton(完成)
-3. pipline/main,可以一次处理多个文件,每个文件的结构化数据都有显示(完成)
-4. 统一logging 日志 (ELK) (完成)
-5. CI/CD pipline (GITHUB action) 
-6. 升级: PDF兼容OCR, LLM.CPP (暂时不用)
+1. 代码优化:
+  - 1. 项目结构, 代码清理, 项目分割, 代码冗余... 
+  - 2. lazy loading 和singleton,懒启动和单例模式,全局缓存,NER模型,语义模型,DonutDOCX分段模型都已添加
+  - 3. pipline/main,可以一次处理多个文件,每个文件的处理过程都有显示
+  - 4. 统一logging 日志, ELK:elastksearch,filebeat,logstash,kibana, docker部署容器,elk文件用filebeat和logstash设置kibana, 用init.ps1启动, 本地logs文件夹和kibana都有日志储存
+  - 5. CI/CD pipline, GITHUB action: ci-cd.yml, CI部分: 忽略了代码风格问题(E402,501问题),忽略了外部数据问题(MongoDB问题),在test-tool的pipline_test添加test函数做测试, 成功返回 pytest-report CD部分: 测试了docker-compose, 成返回docker-build-log
