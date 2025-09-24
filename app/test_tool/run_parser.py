@@ -100,8 +100,7 @@ def fix_resume_dates(structured_resume: dict) -> dict:
     """
     修复教育和工作经历日期：
     1. 教育经历：优先使用 description 中 Month Year，否则用年份。
-    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_dat
-e >= start_date。
+    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_date >= start_date。
     3. highlights 中纯年份或 "Present" 会被清理。
     """
     if not structured_resume:
@@ -174,8 +173,7 @@ def fix_work_dates(work_experience: list) -> list:
             start_date = (
                 month_year_matches[0]
                 if month_year_matches
-                else f"{months_only_matches[0] if months_only_matches else
-'Jan'} 2020"
+                else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
             )
 
         # --- end_date ---
