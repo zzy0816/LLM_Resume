@@ -1,9 +1,10 @@
-import os
-import logging
 import json
+import logging
+import os
 import random
 import re
 from typing import List, Optional, Tuple
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -12,9 +13,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -28,23 +30,70 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
-POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
-COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
+POSITION_KEYWORDS = [
+    "intern",
+    "engineer",
+    "manager",
+    "analyst",
+    "consultant",
+    "scientist",
+    "developer",
+    "research",
+]
+COMPANY_KEYWORDS = [
+    "llc",
+    "inc",
+    "company",
+    "corp",
+    "ltd",
+    "co.",
+    "technolog",
+    "university",
+    "school",
+]
 
 
-POSITION_KEYWORDS = ["intern", "engineer", "manager", "analyst", "consultant", "scientist", "developer", "research"]
-COMPANY_KEYWORDS = ["llc", "inc", "company", "corp", "ltd", "co.", "technolog", "university", "school"]
+POSITION_KEYWORDS = [
+    "intern",
+    "engineer",
+    "manager",
+    "analyst",
+    "consultant",
+    "scientist",
+    "developer",
+    "research",
+]
+COMPANY_KEYWORDS = [
+    "llc",
+    "inc",
+    "company",
+    "corp",
+    "ltd",
+    "co.",
+    "technolog",
+    "university",
+    "school",
+]
 
 # -------------------------
 # 分类段落
 # -------------------------
 CATEGORY_FIELDS = {
-    "work_experience": ["company","position","location","start_date","end_date","description", " highlights"],
-    "education": ["school","degree","grad_date","description"],
-    "projects": ["title","highlights"],
+    "work_experience": [
+        "company",
+        "position",
+        "location",
+        "start_date",
+        "end_date",
+        "description",
+        " highlights",
+    ],
+    "education": ["school", "degree", "grad_date", "description"],
+    "projects": ["title", "highlights"],
     "skills": ["skills"],
-    "other": ["description"]
+    "other": ["description"],
 }
+
 
 # -------------------------
 # 分类归一化
@@ -58,25 +107,22 @@ def normalize_category(cat: str) -> str:
         "professionalexperience": "work_experience",
         "industryexperience": "work_experience",
         "experience": "work_experience",
-
         # ---- 项目经历 ----
         "projects": "projects",
         "project": "projects",
         "projectexperience": "projects",
-
         # ---- 教育 ----
         "education": "education",
         "edu": "education",
-
         # ---- 技能 ----
         "skills": "skills",
         "skill": "skills",
-
         # ---- 其他 ----
-        "other": "other"
+        "other": "other",
     }
     key = cat.lower().replace(" ", "").replace("_", "")
     return mapping.get(key, "other")
+
 
 # -------------------------
 # 技能标准化词典
@@ -93,8 +139,9 @@ SKILL_NORMALIZATION = {
     "pandas": "Pandas",
     "sql": "SQL",
     "llm": "LLM",
-    "aws": "AWS"
+    "aws": "AWS",
 }
+
 
 def normalize_skills(skills: list) -> list:
     """安全技能标准化"""
@@ -112,6 +159,7 @@ def normalize_skills(skills: list) -> list:
             result.add(s_clean)
     return sorted(result)
 
+
 def auto_fill_fields(structured_resume: dict) -> dict:
     """自动补全字段 & 技能（安全处理，不覆盖顶层 skills）"""
     logging.basicConfig(level=logging.DEBUG)
@@ -119,7 +167,15 @@ def auto_fill_fields(structured_resume: dict) -> dict:
     # 定义允许保留的字段
     allowed_fields = {
         "education": {"school", "degree", "grad_date", "description"},
-        "work_experience": {"company", "position", "location", "start_date", "end_date", "description", "highlights"},
+        "work_experience": {
+            "company",
+            "position",
+            "location",
+            "start_date",
+            "end_date",
+            "description",
+            "highlights",
+        },
         "projects": {"title", "highlights"},
         "other": {"description"},
     }
@@ -159,11 +215,13 @@ def auto_fill_fields(structured_resume: dict) -> dict:
 
     return structured_resume
 
+
 # -------------------------
 # 正则兜底
 # -------------------------
 email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 phone_pattern = r"(\+?\d[\d\s\-\(\)]{7,20})"
+
 
 # utils.py
 def extract_basic_info(text: str) -> dict:
@@ -181,6 +239,7 @@ def extract_basic_info(text: str) -> dict:
 
     # 不处理 name，留给 parser.py 单独判断
     return result
+
 
 # -------------------------
 # 技能从文本中提取
@@ -201,7 +260,10 @@ def extract_skills_from_text(text: str) -> list:
         # 忽略太短或包含描述性关键词的项
         if len(p) <= 1:
             continue
-        if any(k in p.lower() for k in ["platform", "tech", "languages", "tools", "frameworks"]):
+        if any(
+            k in p.lower()
+            for k in ["platform", "tech", "languages", "tools", "frameworks"]
+        ):
             continue
         # 去掉末尾多余的句号/中文句号
         p = p.rstrip("。.")
@@ -209,18 +271,70 @@ def extract_skills_from_text(text: str) -> list:
             skills.append(p)
     return skills
 
+
 def rule_based_filter(category: str, items: list) -> list[str]:
     """
     对 FAISS 检索到的候选段落做二次过滤
     返回纯文本字符串列表
     """
     keywords = {
-        "教育经历": ["university", "college", "school", "gpa", "bachelor", "master", "phd", "degree", "教育", "学院", "大学"],
-        "工作经历": ["company", "inc", "llc", "engineer", "analyst", "intern", "experience", "工作", "实习", "任职"],
-        "项目经历": ["project", "built", "developed", "designed", "implemented", "system", "tool", "项目"],
-        "技能": ["python", "sql", "tensorflow", "pytorch", "keras", "docker", "kubernetes",
-                 "aws", "gcp", "azure", "spark", "hadoop", "tableau", "powerbi",
-                 "sklearn", "scikit-learn", "pandas", "numpy", "seaborn", "langchain"]
+        "教育经历": [
+            "university",
+            "college",
+            "school",
+            "gpa",
+            "bachelor",
+            "master",
+            "phd",
+            "degree",
+            "教育",
+            "学院",
+            "大学",
+        ],
+        "工作经历": [
+            "company",
+            "inc",
+            "llc",
+            "engineer",
+            "analyst",
+            "intern",
+            "experience",
+            "工作",
+            "实习",
+            "任职",
+        ],
+        "项目经历": [
+            "project",
+            "built",
+            "developed",
+            "designed",
+            "implemented",
+            "system",
+            "tool",
+            "项目",
+        ],
+        "技能": [
+            "python",
+            "sql",
+            "tensorflow",
+            "pytorch",
+            "keras",
+            "docker",
+            "kubernetes",
+            "aws",
+            "gcp",
+            "azure",
+            "spark",
+            "hadoop",
+            "tableau",
+            "powerbi",
+            "sklearn",
+            "scikit-learn",
+            "pandas",
+            "numpy",
+            "seaborn",
+            "langchain",
+        ],
     }
 
     filtered = []
@@ -230,12 +344,13 @@ def rule_based_filter(category: str, items: list) -> list[str]:
             text = str(item.get("text", ""))
         else:
             text = str(item)
-        
+
         text_low = text.lower()
         if any(k.lower() in text_low for k in keywords.get(category, [])):
             filtered.append(text)  # 这里返回的是字符串，而不是 dict
 
     return filtered
+
 
 def merge_dicts(d1: dict, d2: dict) -> dict:
     """
@@ -245,6 +360,7 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
     - 其他类型，使用 d2 覆盖 d1
     """
     import copy
+
     result = copy.deepcopy(d1)
 
     for key, value in d2.items():
@@ -260,6 +376,7 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
             result[key] = value
     return result
 
+
 def preprocess_paragraphs(paragraphs: List[str]) -> List[str]:
     out = []
     for p in paragraphs:
@@ -267,21 +384,26 @@ def preprocess_paragraphs(paragraphs: List[str]) -> List[str]:
             continue
         text = " ".join(p.split())
         # handle "...2022Skills" like cases
-        text = re.sub(r'(?<=\d)(?=Skills\b)', ' ', text, flags=re.I)
+        text = re.sub(r"(?<=\d)(?=Skills\b)", " ", text, flags=re.I)
         out.append(text)
     logger.debug("Preprocessed paragraphs: %s", out[:12])
     return out
+
 
 def extract_email(text: str) -> Optional[str]:
     m = re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", text)
     return m.group(0) if m else None
 
+
 def extract_phone(text: str) -> Optional[str]:
-    candidates = re.findall(r'(\+?\d[\d\-\s\(\)]{6,}\d)', text)
+    candidates = re.findall(r"(\+?\d[\d\-\s\(\)]{6,}\d)", text)
     return max([c.strip() for c in candidates], key=len) if candidates else None
 
+
 # ----------------- 日期解析 -----------------
-def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+def parse_date_range(
+    date_range: Optional[str], next_line: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
     """
     支持 'Sep 2022 – Jul' 或 'Jun 2021 – Aug 2022' 或 'May 2025 – Present'。
     如果 end 没有年份，则推断和 start 同年或加1年。
@@ -294,8 +416,8 @@ def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None)
 
     # --- 处理 end 为月份但无年份 ---
     if start and end:
-        start_match = re.search(r'([A-Za-z]+)\s*(\d{4})', start)
-        end_match = re.search(r'([A-Za-z]+)\s*(\d{4})', end)
+        start_match = re.search(r"([A-Za-z]+)\s*(\d{4})", start)
+        end_match = re.search(r"([A-Za-z]+)\s*(\d{4})", end)
 
         if start_match:
             start_month, start_year = start_match.group(1), int(start_match.group(2))
@@ -310,16 +432,37 @@ def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None)
 
             # 如果 end_month 是 "Present"，跳过月份比较
             if end_month != "Present":
-                month_order = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-                if start_month and end_month and month_order.index(end_month) < month_order.index(start_month):
+                month_order = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                ]
+                if (
+                    start_month
+                    and end_month
+                    and month_order.index(end_month) < month_order.index(start_month)
+                ):
                     end_year += 1
 
-        end = f"{end_month} {end_year}" if end_month and end_year and end_month != "Present" else end
+        end = (
+            f"{end_month} {end_year}"
+            if end_month and end_year and end_month != "Present"
+            else end
+        )
 
     # 如果 next_line 是年份，也可以覆盖 end
     if next_line:
         next_line = next_line.strip()
-        if re.match(r'^(19|20)\d{2}$', next_line):
+        if re.match(r"^(19|20)\d{2}$", next_line):
             if end and end != "Present":
                 end = f"{end.split()[0]} {next_line}"
             else:
@@ -327,13 +470,14 @@ def parse_date_range(date_range: Optional[str], next_line: Optional[str] = None)
 
     return start, end
 
+
 def is_project_title(text: str) -> bool:
     if not text:
         return False
     low = text.lower()
     if low in ("project", "projects", "项目", "project experience", "project:"):
         return False
-    if "|" in text or "@" in text or re.search(r'\b(19|20)\d{2}\b', text):
+    if "|" in text or "@" in text or re.search(r"\b(19|20)\d{2}\b", text):
         return False
     words = text.split()
     alpha_words = [w for w in words if any(c.isalpha() for c in w)]
@@ -342,6 +486,7 @@ def is_project_title(text: str) -> bool:
     cap_count = sum(1 for w in alpha_words if w[0].isupper())
     ratio = cap_count / len(alpha_words)
     return ratio >= 0.6 and len(words) <= 8
+
 
 def is_work_line(text: str) -> bool:
     if "|" not in text:
@@ -354,6 +499,7 @@ def is_work_line(text: str) -> bool:
     has_year = any(re.search(r"(19|20)\d{2}", p) for p in parts)
     return has_pos and has_comp and has_year
 
+
 def parse_work_line(text: str, next_line: Optional[str] = None):
     parts = [p.strip() for p in text.split("|")]
     company, position, location, date_range = None, None, None, None
@@ -363,9 +509,11 @@ def parse_work_line(text: str, next_line: Optional[str] = None):
             position = p
         elif any(k in low for k in COMPANY_KEYWORDS):
             company = p
-        elif re.search(r'\b[A-Z]{2}\b', p):  # 州缩写
+        elif re.search(r"\b[A-Z]{2}\b", p):  # 州缩写
             location = p
-        elif re.search(r"(19|20)\d{2}", p) or re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", p):
+        elif re.search(r"(19|20)\d{2}", p) or re.search(
+            r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)", p
+        ):
             date_range = p
     start, end = parse_date_range(date_range, next_line)
     return {
@@ -375,8 +523,9 @@ def parse_work_line(text: str, next_line: Optional[str] = None):
         "start_date": start,
         "end_date": end,
         "description": text,
-        "highlights": []
+        "highlights": [],
     }
+
 
 def parse_education_line(text: str):
     parts = [p.strip() for p in text.split("|")]
@@ -384,13 +533,32 @@ def parse_education_line(text: str):
     degree = None
     grad_date = None
     for p in parts[1:]:
-        if any(word in p.lower() for word in ["bachelor", "master", "phd", "degree", "art", "science", "study"]):
+        if any(
+            word in p.lower()
+            for word in [
+                "bachelor",
+                "master",
+                "phd",
+                "degree",
+                "art",
+                "science",
+                "study",
+            ]
+        ):
             degree = p
         # 支持月份 + 年份
-        yr = re.search(r'((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*)?\d{4}', p)
+        yr = re.search(
+            r"((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s*)?\d{4}", p
+        )
         if yr:
             grad_date = yr.group(0)
-    return {"school": school, "degree": degree, "grad_date": grad_date, "description": text}
+    return {
+        "school": school,
+        "degree": degree,
+        "grad_date": grad_date,
+        "description": text,
+    }
+
 
 def validate_and_clean(structured: dict) -> dict:
     cleaned = {
@@ -401,21 +569,26 @@ def validate_and_clean(structured: dict) -> dict:
         "work_experience": [],
         "projects": [],
         "skills": structured.get("skills", []),
-        "other": []
+        "other": [],
     }
 
     # 教育经历
     cleaned["education"].extend([e for e in structured.get("education", []) if e])
 
     # 工作经历
-    cleaned["work_experience"].extend([w for w in structured.get("work_experience", []) if w])
+    cleaned["work_experience"].extend(
+        [w for w in structured.get("work_experience", []) if w]
+    )
 
     # 项目 - 过滤掉伪项目
     for p in structured.get("projects", []):
         if not p:
             continue
         title = (p.get("title") or "").lower()
-        if any(x in title for x in ["platforms & tech", "frameworks", "skills", "sourced code"]):
+        if any(
+            x in title
+            for x in ["platforms & tech", "frameworks", "skills", "sourced code"]
+        ):
             cleaned["other"].append(p)
         else:
             cleaned["projects"].append(p)
@@ -424,7 +597,9 @@ def validate_and_clean(structured: dict) -> dict:
     new_other = []
     for o in structured.get("other", []):
         desc = o if isinstance(o, str) else o.get("description", "")
-        if desc and any(k in desc.lower() for k in ["frameworks", "libraries", "tech", "tools"]):
+        if desc and any(
+            k in desc.lower() for k in ["frameworks", "libraries", "tech", "tools"]
+        ):
             # 把冒号后的部分拆成技能
             parts = desc.split(":")[-1]
             skills = [s.strip() for s in parts.split(",") if s.strip()]
@@ -437,7 +612,10 @@ def validate_and_clean(structured: dict) -> dict:
     moved, remain = [], []
     for o in cleaned["other"]:
         desc = o if isinstance(o, str) else o.get("description", "")
-        if "|" in desc and (any(k in desc.lower() for k in COMPANY_KEYWORDS + POSITION_KEYWORDS) and re.search(r"(19|20)\d{2}", desc)):
+        if "|" in desc and (
+            any(k in desc.lower() for k in COMPANY_KEYWORDS + POSITION_KEYWORDS)
+            and re.search(r"(19|20)\d{2}", desc)
+        ):
             moved.append(parse_work_line(desc))
         else:
             remain.append(o)
@@ -448,6 +626,7 @@ def validate_and_clean(structured: dict) -> dict:
     cleaned["skills"] = normalize_skills(cleaned["skills"])
 
     return cleaned
+
 
 def fix_resume_dates(structured_resume: dict) -> dict:
     """
@@ -460,7 +639,9 @@ def fix_resume_dates(structured_resume: dict) -> dict:
         return {}
 
     # ---- 教育经历 ----
-    month_year_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    month_year_pattern = (
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    )
     year_pattern = r"(19|20)\d{2}"
 
     for edu in structured_resume.get("education", []):
@@ -481,6 +662,7 @@ def fix_resume_dates(structured_resume: dict) -> dict:
     structured_resume["work_experience"] = fix_work_dates(work_exp)
 
     return structured_resume
+
 
 def fix_work_dates(work_experience: list) -> list:
     month_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
@@ -503,18 +685,26 @@ def fix_work_dates(work_experience: list) -> list:
                 highlight_years.append(int(h_strip))
             else:
                 cleaned_highlights.append(h)
-                highlight_years.extend([int(y) for y in re.findall(year_pattern, h_strip)])
+                highlight_years.extend(
+                    [int(y) for y in re.findall(year_pattern, h_strip)]
+                )
         job["highlights"] = cleaned_highlights
 
         # 提取 description 中所有 Month Year
-        month_year_matches = re.findall(rf"{month_pattern}\s+{year_pattern}", desc_clean)
+        month_year_matches = re.findall(
+            rf"{month_pattern}\s+{year_pattern}", desc_clean
+        )
         # 提取 description 中只有 Month 的部分
         months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
 
         # --- start_date ---
         start_date = job.get("start_date")
         if not start_date or str(start_date).lower() in ["null", "n/a", ""]:
-            start_date = month_year_matches[0] if month_year_matches else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+            start_date = (
+                month_year_matches[0]
+                if month_year_matches
+                else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+            )
 
         # --- end_date ---
         end_date = job.get("end_date")
@@ -526,7 +716,11 @@ def fix_work_dates(work_experience: list) -> list:
                 start_m, start_y = start_date.split()
                 start_y = int(start_y)
                 # 找到 end 月份，如果只有一个 month-only，用 start month +1 年
-                end_m = months_only_matches[1] if len(months_only_matches) > 1 else months_only_matches[0]
+                end_m = (
+                    months_only_matches[1]
+                    if len(months_only_matches) > 1
+                    else months_only_matches[0]
+                )
                 end_date = f"{end_m} {start_y + 1}"
             elif highlight_years:
                 end_date = f"{start_date.split()[0]} {max(highlight_years)}"
@@ -551,6 +745,7 @@ def fix_work_dates(work_experience: list) -> list:
 
     return work_experience
 
+
 # -----------------------
 # 测试 auto_fill_fields
 # -----------------------
@@ -559,11 +754,42 @@ if __name__ == "__main__":
         "name": "Zhenyu Zhang",
         "email": "Zhang.zhenyu6@northeastern.edu",
         "phone": "+1860234-7101",
-        "education": [{"school": "Northeastern University", "degree": "Master of Science in Computer Science", "grad_date": "2025", "description": "Northeastern University | Master of Science in Computer Science | 2025"}],
-        "work_experience": [{"title": "Data Science Intern", "company": "Google LLC", "start_date": "Jun 2024", "end_date": "Aug 2024", "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024", "Professional Experience": None, "Industry Experience": None, "Experience": None}],
-        "projects": [{"project_title": "YouTube Recommendation System Built a", "start_date": None, "end_date": None, "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...", "Projects": None, "Project Experience": None}],
+        "education": [
+            {
+                "school": "Northeastern University",
+                "degree": "Master of Science in Computer Science",
+                "grad_date": "2025",
+                "description": "Northeastern University | Master of Science in Computer Science | 2025",
+            }
+        ],
+        "work_experience": [
+            {
+                "title": "Data Science Intern",
+                "company": "Google LLC",
+                "start_date": "Jun 2024",
+                "end_date": "Aug 2024",
+                "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024",
+                "Professional Experience": None,
+                "Industry Experience": None,
+                "Experience": None,
+            }
+        ],
+        "projects": [
+            {
+                "project_title": "YouTube Recommendation System Built a",
+                "start_date": None,
+                "end_date": None,
+                "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...",
+                "Projects": None,
+                "Project Experience": None,
+            }
+        ],
         "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
-        "other": [{"description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"}]
+        "other": [
+            {
+                "description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"
+            }
+        ],
     }
 
     filled_resume = auto_fill_fields(test_resume)

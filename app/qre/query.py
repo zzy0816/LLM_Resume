@@ -1,12 +1,14 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
 import re
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from app.utils.utils import normalize_category, extract_skills_from_text
+from app.utils.utils import extract_skills_from_text, normalize_category
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -15,9 +17,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -30,30 +33,60 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 # -------------------------
 # 查询接口
 # -------------------------
 def detect_query_category(query: str):
     query_lower = query.lower()
-    if any(k in query_lower for k in ["work", "experience", "career", "job", "employment", "工作经历"]):
+    if any(
+        k in query_lower
+        for k in ["work", "experience", "career", "job", "employment", "工作经历"]
+    ):
         return "work_experience"
     elif any(k in query_lower for k in ["project", "projects", "项目经历", "项目"]):
         return "projects"
-    elif any(k in query_lower for k in ["education", "degree", "university", "school", "bachelor", "master", "教育"]):
+    elif any(
+        k in query_lower
+        for k in [
+            "education",
+            "degree",
+            "university",
+            "school",
+            "bachelor",
+            "master",
+            "教育",
+        ]
+    ):
         return "education"
-    elif any(k in query_lower for k in ["skill", "skills", "python", "tensorflow", "ml", "pytorch", "sql", "技能"]):
+    elif any(
+        k in query_lower
+        for k in [
+            "skill",
+            "skills",
+            "python",
+            "tensorflow",
+            "ml",
+            "pytorch",
+            "sql",
+            "技能",
+        ]
+    ):
         return "skills"
     elif any(k in query_lower for k in ["other", "其他"]):
         return "other"
     else:
         return None
 
-def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_category_filter=True):
+
+def query_dynamic_category(
+    db, structured_resume, query: str, top_k=10, use_category_filter=True
+):
     """
     查询指定类别段落（可严格类别过滤）
     返回 {"query": query, "results": [...] }
     """
-    docs = db.similarity_search(query, k=top_k*5)
+    docs = db.similarity_search(query, k=top_k * 5)
     logger.debug("[QUERY DEBUG] retrieved %d docs for query='%s'", len(docs), query)
 
     candidate_paras = []
@@ -65,16 +98,50 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
 
             if target_category == "education":
                 doc_lower = doc.page_content.lower()
-                has_school = any(tok in doc_lower for tok in ["university","college","学院","大学"])
-                has_degree = any(tok in doc_lower for tok in ["bachelor","master","phd","bs","ms","mba","学士","硕士","博士"])
+                has_school = any(
+                    tok in doc_lower
+                    for tok in ["university", "college", "学院", "大学"]
+                )
+                has_degree = any(
+                    tok in doc_lower
+                    for tok in [
+                        "bachelor",
+                        "master",
+                        "phd",
+                        "bs",
+                        "ms",
+                        "mba",
+                        "学士",
+                        "硕士",
+                        "博士",
+                    ]
+                )
                 if doc_cat == "education" and (has_school or has_degree):
                     candidate_paras.append(doc.page_content)
 
             elif target_category == "skills":
                 skill_keywords = [
-                    "python","sql","pandas","numpy","scikit","sklearn","tensorflow",
-                    "pytorch","keras","docker","kubernetes","aws","gcp","azure",
-                    "spark","hadoop","tableau","powerbi","llm","llama","hugging"
+                    "python",
+                    "sql",
+                    "pandas",
+                    "numpy",
+                    "scikit",
+                    "sklearn",
+                    "tensorflow",
+                    "pytorch",
+                    "keras",
+                    "docker",
+                    "kubernetes",
+                    "aws",
+                    "gcp",
+                    "azure",
+                    "spark",
+                    "hadoop",
+                    "tableau",
+                    "powerbi",
+                    "llm",
+                    "llama",
+                    "hugging",
                 ]
                 if doc_cat == "skills":
                     candidate_paras.append(doc.page_content)
@@ -90,15 +157,19 @@ def query_dynamic_category(db, structured_resume, query: str, top_k=10, use_cate
                 break
 
         if not candidate_paras:
-            logger.warning("No candidate paragraphs found for query='%s' with strict category filter.", query)
+            logger.warning(
+                "No candidate paragraphs found for query='%s' with strict category filter.",
+                query,
+            )
             return {"query": query, "results": []}
     else:
         candidate_paras = [doc.page_content for doc in docs[:top_k]]
 
     for i, p in enumerate(candidate_paras):
-        logger.info("[QUERY RESULT] %d. %s", i+1, p[:140])
+        logger.info("[QUERY RESULT] %d. %s", i + 1, p[:140])
 
     return {"query": query, "results": candidate_paras}
+
 
 # -------------------------
 # 多类别整合查询（安全版）
@@ -112,7 +183,9 @@ def query_all_categories(db, structured_resume, top_k=10):
             paras = res.get("results", [])
             # 如果严格过滤没有结果，用非严格模式 fallback
             if not paras:
-                res = query_dynamic_category(db, structured_resume, q, top_k=top_k, use_category_filter=False)
+                res = query_dynamic_category(
+                    db, structured_resume, q, top_k=top_k, use_category_filter=False
+                )
                 paras = res.get("results", [])
             all_results[q] = paras
         except Exception as e:
@@ -120,16 +193,19 @@ def query_all_categories(db, structured_resume, top_k=10):
             all_results[q] = []
     return all_results
 
+
 # -------------------------
 # 填充函数
 # -------------------------
-def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict = None) -> dict:
+def fill_query_exact(
+    structured: dict, query_results: dict, parsed_resume: dict = None
+) -> dict:
     """
     使用 query_results 覆盖原 JSON 对应类别，但保留 parsed_resume 的 highlights / title / position / location 等字段
     对所有类别支持字符串或 dict 输入，避免 AttributeError
     支持 N/A 前缀自动跳过
     """
-    
+
     base_info = {k: structured.get(k) for k in ["name", "email", "phone"]}
     new_structured = {
         "name": base_info.get("name"),
@@ -139,7 +215,7 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
         "work_experience": [],
         "projects": [],
         "skills": [],
-        "other": []
+        "other": [],
     }
 
     def safe_text(para):
@@ -150,7 +226,9 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
         return re.sub(r"^(N/A\s*)", "", text, flags=re.I).strip()
 
     # ----------------- 教育经历 -----------------
-    edu_date_pattern = re.compile(r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})", re.I)
+    edu_date_pattern = re.compile(
+        r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})", re.I
+    )
     edu_paras = query_results.get("教育经历", []) or structured.get("education", [])
     for i, para in enumerate(edu_paras):
         text = safe_text(para)
@@ -161,7 +239,7 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
             "school": parts[0] if len(parts) > 0 else "N/A",
             "degree": parts[1] if len(parts) > 1 else "N/A",
             "grad_date": "Unknown",
-            "description": text
+            "description": text,
         }
         match = edu_date_pattern.search(text)
         if match:
@@ -179,9 +257,11 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
     # ----------------- 工作经历 -----------------
     work_date_pattern = re.compile(
         r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})\s*[-–]\s*(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(Present|\d{4})",
-        re.I
+        re.I,
     )
-    work_paras = query_results.get("工作经历", []) or structured.get("work_experience", [])
+    work_paras = query_results.get("工作经历", []) or structured.get(
+        "work_experience", []
+    )
     for i, para in enumerate(work_paras):
         text = safe_text(para)
         if not text:
@@ -193,12 +273,14 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
             "start_date": "Unknown",
             "end_date": "Present",
             "description": text,
-            "highlights": []
+            "highlights": [],
         }
         match = work_date_pattern.search(text)
         if match:
             start_month, start_year, end_month, end_year = match.groups()
-            entry["start_date"] = f"{start_month} {start_year}" if start_month else start_year
+            entry["start_date"] = (
+                f"{start_month} {start_year}" if start_month else start_year
+            )
             entry["end_date"] = f"{end_month} {end_year}" if end_month else end_year
 
         # 回填 parsed_resume 的 highlights / location / title 等
@@ -220,7 +302,9 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
         if not lines:
             continue
         # 判断第一行是否是 title
-        if re.match(r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()):
+        if re.match(
+            r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()
+        ):
             title = ""
             content = "\n".join(lines)
         else:
@@ -230,7 +314,14 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
         # 尝试按 title 匹配原 parsed_resume
         parsed_entry = None
         if parsed_resume:
-            parsed_entry = next((p for p in parsed_resume.get("projects", []) if p.get("title") == title), None)
+            parsed_entry = next(
+                (
+                    p
+                    for p in parsed_resume.get("projects", [])
+                    if p.get("title") == title
+                ),
+                None,
+            )
 
         highlights = []
         # 先加入 parsed_resume highlights
@@ -245,7 +336,7 @@ def fill_query_exact(structured: dict, query_results: dict, parsed_resume: dict 
         entry = {
             "title": title if title else content[:60],
             "highlights": highlights,
-            "description": None
+            "description": None,
         }
         new_structured["projects"].append(entry)
 

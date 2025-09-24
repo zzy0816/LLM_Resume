@@ -1,15 +1,16 @@
-import re
-import textwrap
-import os
-import logging
 import json
+import logging
+import os
 import random
 import re
+import textwrap
 from difflib import SequenceMatcher
+
 try:
     from PIL import Image, ImageDraw, ImageFont
 except Exception:
     Image = ImageDraw = ImageFont = None
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -18,9 +19,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -35,10 +37,13 @@ logger.setLevel(logging.INFO)
 
 MAX_CHUNK_SIZE = 400
 
+
 # -------------------------
 # 文本渲染（供 Donut 使用）
 # -------------------------
-def render_paragraphs_to_image(paragraphs: list[str], img_width: int = 1200, font_path: str | None = None):
+def render_paragraphs_to_image(
+    paragraphs: list[str], img_width: int = 1200, font_path: str | None = None
+):
     if Image is None or ImageDraw is None or ImageFont is None:
         return None
 
@@ -57,16 +62,19 @@ def render_paragraphs_to_image(paragraphs: list[str], img_width: int = 1200, fon
     draw = ImageDraw.Draw(img)
 
     try:
-        font = ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
+        font = (
+            ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
+        )
     except Exception:
         font = ImageFont.load_default()
 
     y = margin
     for ln in lines:
-        draw.text((margin, y), ln, fill=(0,0,0), font=font)
+        draw.text((margin, y), ln, fill=(0, 0, 0), font=font)
         y += line_height
 
     return img
+
 
 # -------------------------
 # 合并段落
@@ -74,7 +82,14 @@ def render_paragraphs_to_image(paragraphs: list[str], img_width: int = 1200, fon
 def merge_semantic_paragraphs(text: str):
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     paragraphs, curr = [], []
-    section_keywords = ["education", "experience", "project", "skills", "work", "certificate"]
+    section_keywords = [
+        "education",
+        "experience",
+        "project",
+        "skills",
+        "work",
+        "certificate",
+    ]
 
     for line in lines:
         if any(kw in line.lower() for kw in section_keywords):
@@ -96,7 +111,7 @@ def merge_semantic_paragraphs(text: str):
             chunk = ""
             for s in sentences:
                 s = s.strip()
-                if len(chunk)+len(s)+1 <= MAX_CHUNK_SIZE:
+                if len(chunk) + len(s) + 1 <= MAX_CHUNK_SIZE:
                     chunk += s + "。"
                 else:
                     final_paragraphs.append(chunk.strip())
@@ -105,17 +120,31 @@ def merge_semantic_paragraphs(text: str):
                 final_paragraphs.append(chunk.strip())
     return final_paragraphs
 
+
 # -------------------------
 # FAISS 分段逻辑
 # -------------------------
-ACTION_VERBS = ("built", "created", "used", "collected", "led", "fine-tuned", "developed", "designed", "implemented")
+ACTION_VERBS = (
+    "built",
+    "created",
+    "used",
+    "collected",
+    "led",
+    "fine-tuned",
+    "developed",
+    "designed",
+    "implemented",
+)
+
 
 def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     chunks, curr_chunk = [], []
 
     for line in lines:
-        is_title = (len(line)<=100 and not line.lower().startswith(ACTION_VERBS)) or "project" in line.lower()
+        is_title = (
+            len(line) <= 100 and not line.lower().startswith(ACTION_VERBS)
+        ) or "project" in line.lower()
         if is_title and curr_chunk:
             chunks.append("\n".join(curr_chunk))
             curr_chunk = [line]
@@ -132,7 +161,7 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
             sentences, current = re.split(r"[。,.]", c), ""
             for s in sentences:
                 s = s.strip()
-                if len(current)+len(s)+1 <= max_size:
+                if len(current) + len(s) + 1 <= max_size:
                     current += s + "。"
                 else:
                     if current.strip():
@@ -142,27 +171,37 @@ def semantic_split(text: str, max_size=MAX_CHUNK_SIZE):
                 final_chunks.append(current.strip())
     return final_chunks
 
+
 # -------------------------
 # 文本归一化和去重
 # -------------------------
 def normalize_text_for_compare(s: str) -> str:
-    if not isinstance(s,str): return ""
+    if not isinstance(s, str):
+        return ""
     s = s.lower().strip()
     for ch in "。。，,、：:；;.-–—()[]{}\"'`··\u3000":
-        s = s.replace(ch," ")
-    s = re.sub(r"\s+"," ",s).strip()
+        s = s.replace(ch, " ")
+    s = re.sub(r"\s+", " ", s).strip()
     return s
 
-def similar_ratio(a: str, b: str) -> float:
-    return SequenceMatcher(None,a,b).ratio()
 
-def is_duplicate_para(new_para: str, existing_list: list, threshold: float = 0.85) -> bool:
+def similar_ratio(a: str, b: str) -> float:
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def is_duplicate_para(
+    new_para: str, existing_list: list, threshold: float = 0.85
+) -> bool:
     norm_new = normalize_text_for_compare(new_para)
-    if not norm_new: return True
+    if not norm_new:
+        return True
     for e in existing_list:
         text = e.get("description") if isinstance(e, dict) else str(e)
         norm_e = normalize_text_for_compare(text)
-        if not norm_e: continue
-        if norm_new in norm_e or norm_e in norm_new: return True
-        if similar_ratio(norm_new, norm_e) >= threshold: return True
+        if not norm_e:
+            continue
+        if norm_new in norm_e or norm_e in norm_new:
+            return True
+        if similar_ratio(norm_new, norm_e) >= threshold:
+            return True
     return False

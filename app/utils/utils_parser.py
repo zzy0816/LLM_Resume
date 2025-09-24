@@ -1,13 +1,17 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
+import sys
+
 import torch
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from sentence_transformers import SentenceTransformer, util
+
 from app.utils.files import load_embeddings, save_embeddings
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -16,9 +20,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -44,9 +49,10 @@ CATEGORY_EMBS = {
         "projects": "项目经历，如开发、实现、搭建、研究",
         "education": "教育经历，如学位、本科、硕士、大学",
         "skills": "技能，如Python、SQL、TensorFlow、PyTorch、机器学习",
-        "other": "其他内容"
+        "other": "其他内容",
     }.items()
 }
+
 
 def semantic_fallback(paragraphs: list[str], file_name: str = None) -> list[str]:
     """
@@ -71,7 +77,10 @@ def semantic_fallback(paragraphs: list[str], file_name: str = None) -> list[str]
 
     results = []
     for i, emb in enumerate(para_embs):
-        sims = {cat: float(util.cos_sim(emb, cat_emb)) for cat, cat_emb in CATEGORY_EMBS.items()}
+        sims = {
+            cat: float(util.cos_sim(emb, cat_emb))
+            for cat, cat_emb in CATEGORY_EMBS.items()
+        }
         sorted_sims = sorted(sims.items(), key=lambda x: x[1], reverse=True)
         best_cat, best_score = sorted_sims[0]
         second_score = sorted_sims[1][1] if len(sorted_sims) > 1 else 0.0

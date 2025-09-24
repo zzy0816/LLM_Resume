@@ -1,18 +1,26 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
 import re
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from app.utils.files import load_faiss, save_faiss, save_json, load_json
 from app.qre.doc_read import read_document_paragraphs
 from app.qre.parser import parse_resume_to_structured
-from app.utils.utils import auto_fill_fields, extract_basic_info, rule_based_filter, validate_and_clean, fix_resume_dates
-from app.qre.query import query_dynamic_category, fill_query_exact
-from app.storage.db import save_resume
+from app.qre.query import fill_query_exact, query_dynamic_category
 from app.qre.semantic import build_faiss
+from app.storage.db import save_resume
+from app.utils.files import load_faiss, load_json, save_faiss, save_json
+from app.utils.utils import (
+    auto_fill_fields,
+    extract_basic_info,
+    fix_resume_dates,
+    rule_based_filter,
+    validate_and_clean,
+)
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -21,9 +29,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -36,11 +45,13 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 # ------------------------
 # 文件名 sanitize
 # ------------------------
 def sanitize_filename(file_name: str) -> str:
     return file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
+
 
 # ------------------------
 # 恢复 fill_query_exact 结果的结构
@@ -52,16 +63,25 @@ def restore_parsed_structure(structured_resume, original_resume):
         restored = []
         for i, item in enumerate(structured_resume["work_experience"]):
             if isinstance(item, dict):
-                orig_item = original_resume.get("work_experience", [])[i] if i < len(original_resume.get("work_experience", [])) else {}
-                restored.append({
-                    "company": item.get("company") or orig_item.get("company"),
-                    "position": item.get("title") or orig_item.get("position"),
-                    "location": item.get("location") or orig_item.get("location"),
-                    "start_date": item.get("start_date") or orig_item.get("start_date"),
-                    "end_date": item.get("end_date") or orig_item.get("end_date"),
-                    "description": item.get("description") or orig_item.get("description"),
-                    "highlights": item.get("highlights") or orig_item.get("highlights", [])
-                })
+                orig_item = (
+                    original_resume.get("work_experience", [])[i]
+                    if i < len(original_resume.get("work_experience", []))
+                    else {}
+                )
+                restored.append(
+                    {
+                        "company": item.get("company") or orig_item.get("company"),
+                        "position": item.get("title") or orig_item.get("position"),
+                        "location": item.get("location") or orig_item.get("location"),
+                        "start_date": item.get("start_date")
+                        or orig_item.get("start_date"),
+                        "end_date": item.get("end_date") or orig_item.get("end_date"),
+                        "description": item.get("description")
+                        or orig_item.get("description"),
+                        "highlights": item.get("highlights")
+                        or orig_item.get("highlights", []),
+                    }
+                )
         structured_resume["work_experience"] = restored
 
     # projects
@@ -78,11 +98,14 @@ def restore_parsed_structure(structured_resume, original_resume):
             if isinstance(item, dict):
                 title = item.get("project_title") or item.get("title")
                 if title and title not in existing_titles:
-                    restored.append({
-                        "title": title,
-                        "highlights": item.get("highlights", []),
-                        "description": item.get("project_content") or item.get("description", "")
-                    })
+                    restored.append(
+                        {
+                            "title": title,
+                            "highlights": item.get("highlights", []),
+                            "description": item.get("project_content")
+                            or item.get("description", ""),
+                        }
+                    )
                     existing_titles.add(title)
 
         structured_resume["projects"] = restored
@@ -92,16 +115,25 @@ def restore_parsed_structure(structured_resume, original_resume):
         restored = []
         for i, item in enumerate(structured_resume["education"]):
             if isinstance(item, dict):
-                orig_item = original_resume.get("education", [])[i] if i < len(original_resume.get("education", [])) else {}
-                restored.append({
-                    "school": item.get("school") or orig_item.get("school"),
-                    "degree": item.get("degree") or orig_item.get("degree"),
-                    "grad_date": item.get("grad_date") or orig_item.get("grad_date"),
-                    "description": item.get("description") or orig_item.get("description")
-                })
+                orig_item = (
+                    original_resume.get("education", [])[i]
+                    if i < len(original_resume.get("education", []))
+                    else {}
+                )
+                restored.append(
+                    {
+                        "school": item.get("school") or orig_item.get("school"),
+                        "degree": item.get("degree") or orig_item.get("degree"),
+                        "grad_date": item.get("grad_date")
+                        or orig_item.get("grad_date"),
+                        "description": item.get("description")
+                        or orig_item.get("description"),
+                    }
+                )
         structured_resume["education"] = restored
 
     return structured_resume
+
 
 # ------------------------
 # skills 处理
@@ -119,6 +151,7 @@ def clean_skills(raw_skills: list[str]) -> list[str]:
         cleaned.extend(parts)
     return cleaned
 
+
 # ------------------------
 # 回填工作经历时间
 # ------------------------
@@ -133,25 +166,38 @@ def restore_work_experience(structured_resume, parsed_resume, faiss_results):
         else:
             faiss_entry = {}
 
-        orig_item = parsed_resume.get("work_experience", [])[i] if i < len(parsed_resume.get("work_experience", [])) else {}
+        orig_item = (
+            parsed_resume.get("work_experience", [])[i]
+            if i < len(parsed_resume.get("work_experience", []))
+            else {}
+        )
 
-        restored.append({
-            "company": item.get("company") or orig_item.get("company"),
-            "position": item.get("title") or orig_item.get("position"),
-            "location": item.get("location") or orig_item.get("location"),
-            "start_date": faiss_entry.get("start_date") or orig_item.get("start_date") or "Unknown",
-            "end_date": faiss_entry.get("end_date") or orig_item.get("end_date") or "Present",
-            "description": item.get("description") or orig_item.get("description"),
-            "highlights": item.get("highlights") or orig_item.get("highlights", [])
-        })
+        restored.append(
+            {
+                "company": item.get("company") or orig_item.get("company"),
+                "position": item.get("title") or orig_item.get("position"),
+                "location": item.get("location") or orig_item.get("location"),
+                "start_date": faiss_entry.get("start_date")
+                or orig_item.get("start_date")
+                or "Unknown",
+                "end_date": faiss_entry.get("end_date")
+                or orig_item.get("end_date")
+                or "Present",
+                "description": item.get("description") or orig_item.get("description"),
+                "highlights": item.get("highlights") or orig_item.get("highlights", []),
+            }
+        )
 
     structured_resume["work_experience"] = restored
     return structured_resume
 
+
 # ------------------------
 # 主 pipeline
 # ------------------------
-def main_pipeline(file_names: list[str], mode: str = "exact", use_cache: bool = True) -> dict[str, dict]:
+def main_pipeline(
+    file_names: list[str], mode: str = "exact", use_cache: bool = True
+) -> dict[str, dict]:
     """
     file_names: 要处理的文件列表
     mode: exact 或其他模式
@@ -184,7 +230,7 @@ def main_pipeline(file_names: list[str], mode: str = "exact", use_cache: bool = 
                 "work_experience": [],
                 "projects": [],
                 "skills": [],
-                "other": []
+                "other": [],
             }
 
             parsed_resume = parse_resume_to_structured(paragraphs) or {}
@@ -217,21 +263,35 @@ def main_pipeline(file_names: list[str], mode: str = "exact", use_cache: bool = 
         # -----------------
         # 数据回填与清洗
         # -----------------
-        structured_resume = fill_query_exact(structured_resume, query_results, parsed_resume)
+        structured_resume = fill_query_exact(
+            structured_resume, query_results, parsed_resume
+        )
         structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
-        structured_resume = restore_work_experience(structured_resume, parsed_resume, query_results)
+        structured_resume = restore_work_experience(
+            structured_resume, parsed_resume, query_results
+        )
         structured_resume = validate_and_clean(structured_resume)
         structured_resume = fix_resume_dates(structured_resume)
-        structured_resume["skills"] = clean_skills(query_results.get("技能", []) or structured_resume.get("skills", []))
+        structured_resume["skills"] = clean_skills(
+            query_results.get("技能", []) or structured_resume.get("skills", [])
+        )
         structured_resume["other"] = [
-            {"description": str(entry.get("description", ""))} if isinstance(entry, dict) else {"description": str(entry)}
+            (
+                {"description": str(entry.get("description", ""))}
+                if isinstance(entry, dict)
+                else {"description": str(entry)}
+            )
             for entry in structured_resume.get("other", [])
         ]
 
         # -----------------
         # 保存结果
         # -----------------
-        save_resume(user_id=user_email, file_name=safe_name + "_faiss_confirmed", data=structured_resume)
+        save_resume(
+            user_id=user_email,
+            file_name=safe_name + "_faiss_confirmed",
+            data=structured_resume,
+        )
         save_json(safe_name + "_faiss_confirmed", structured_resume)
         logger.info(f"[PIPELINE] Saved resume for {user_email}")
 
@@ -240,13 +300,14 @@ def main_pipeline(file_names: list[str], mode: str = "exact", use_cache: bool = 
 
     return results
 
+
 # ------------------------
 # 主函数
 # ------------------------
 if __name__ == "__main__":
     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
     all_results = main_pipeline(files_to_process, mode="exact")
-    
+
     for file_name, structured_resume in all_results.items():
         logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} =====")
         logger.info(json.dumps(structured_resume, ensure_ascii=False, indent=2))

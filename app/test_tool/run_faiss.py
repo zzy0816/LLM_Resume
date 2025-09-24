@@ -1,16 +1,19 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from app.test_tool.query_test import query_dynamic_category, fill_query_exact
-from app.utils.utils import rule_based_filter, validate_and_clean
-from app.test_tool.pipline_test import restore_parsed_structure
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
+
+from app.test_tool.pipline_test import restore_parsed_structure
+from app.test_tool.query_test import fill_query_exact, query_dynamic_category
+from app.utils.utils import rule_based_filter, validate_and_clean
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -19,9 +22,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -34,11 +38,13 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 # ------------------------
 # 测试 FAISS 构建和查询
 # ------------------------
 def build_test_faiss(structured_resume):
     from sentence_transformers import SentenceTransformer
+
     docs = []
     for cat in ["work_experience", "projects", "education", "skills", "other"]:
         entries = structured_resume.get(cat, [])
@@ -59,14 +65,19 @@ def build_test_faiss(structured_resume):
                 else:
                     text = e.get("description", "") or ""
                 if text:
-                    docs.append(LC_Document(page_content=text, metadata={"category": cat}))
+                    docs.append(
+                        LC_Document(page_content=text, metadata={"category": cat})
+                    )
     if not docs:
         logger.warning("No docs to build FAISS.")
         return None
-    embeddings_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings_model = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
     db = FAISS.from_documents(docs, embeddings_model)
     logger.info(f"FAISS DB built with {len(docs)} documents")
     return db
+
 
 # ------------------------
 # 主测试函数
@@ -102,7 +113,9 @@ def test_faiss(parsed_json_file: str):
             logger.info(f"  {i+1}: {item[:120]}")
 
     # 4️⃣ 使用 fill_query_exact 回填
-    structured_resume = fill_query_exact(structured_resume, query_results, parsed_resume)
+    structured_resume = fill_query_exact(
+        structured_resume, query_results, parsed_resume
+    )
     structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
     structured_resume = validate_and_clean(structured_resume)
 
@@ -117,13 +130,17 @@ def test_faiss(parsed_json_file: str):
         json.dump(structured_resume, f, ensure_ascii=False, indent=2)
     logger.info(f"Saved FAISS test JSON: {output_file}")
 
+
 # ------------------------
 # 脚本入口
 # ------------------------
 if __name__ == "__main__":
     import os
+
     print("CWD:", os.getcwd())
     print("Exists:", os.path.exists(r"data\classified\Resume_AI_.pdf_parsed.json"))
 
-    test_file = r"data\classified\Resume_AI_.pdf_parsed.json"  # 使用已保存的 parsed.json 文件
+    test_file = (
+        r"data\classified\Resume_AI_.pdf_parsed.json"  # 使用已保存的 parsed.json 文件
+    )
     test_faiss(test_file)

@@ -1,16 +1,18 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
 import re
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from app.utils.files import save_json
 from app.qre.doc_read import read_document_paragraphs
-from app.test_tool.parser_test import parse_resume_to_structured 
-from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
 from app.storage.db import save_resume
+from app.test_tool.parser_test import parse_resume_to_structured
+from app.utils.files import save_json
+from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -19,9 +21,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -34,8 +37,10 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
+
 def sanitize_filename(file_name: str) -> str:
     return file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
+
 
 def make_safe_for_mongo(obj):
     """
@@ -84,6 +89,7 @@ def make_safe_for_mongo(obj):
 
     return _sanitize(obj)
 
+
 def fix_resume_dates(structured_resume: dict) -> dict:
     """
     修复教育和工作经历日期：
@@ -95,7 +101,9 @@ def fix_resume_dates(structured_resume: dict) -> dict:
         return {}
 
     # ---- 教育经历 ----
-    month_year_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    month_year_pattern = (
+        r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(19|20)\d{2}"
+    )
     year_pattern = r"(19|20)\d{2}"
 
     for edu in structured_resume.get("education", []):
@@ -116,6 +124,7 @@ def fix_resume_dates(structured_resume: dict) -> dict:
     structured_resume["work_experience"] = fix_work_dates(work_exp)
 
     return structured_resume
+
 
 def fix_work_dates(work_experience: list) -> list:
     month_pattern = r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
@@ -138,18 +147,26 @@ def fix_work_dates(work_experience: list) -> list:
                 highlight_years.append(int(h_strip))
             else:
                 cleaned_highlights.append(h)
-                highlight_years.extend([int(y) for y in re.findall(year_pattern, h_strip)])
+                highlight_years.extend(
+                    [int(y) for y in re.findall(year_pattern, h_strip)]
+                )
         job["highlights"] = cleaned_highlights
 
         # 提取 description 中所有 Month Year
-        month_year_matches = re.findall(rf"{month_pattern}\s+{year_pattern}", desc_clean)
+        month_year_matches = re.findall(
+            rf"{month_pattern}\s+{year_pattern}", desc_clean
+        )
         # 提取 description 中只有 Month 的部分
         months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
 
         # --- start_date ---
         start_date = job.get("start_date")
         if not start_date or str(start_date).lower() in ["null", "n/a", ""]:
-            start_date = month_year_matches[0] if month_year_matches else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+            start_date = (
+                month_year_matches[0]
+                if month_year_matches
+                else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+            )
 
         # --- end_date ---
         end_date = job.get("end_date")
@@ -161,7 +178,11 @@ def fix_work_dates(work_experience: list) -> list:
                 start_m, start_y = start_date.split()
                 start_y = int(start_y)
                 # 找到 end 月份，如果只有一个 month-only，用 start month +1 年
-                end_m = months_only_matches[1] if len(months_only_matches) > 1 else months_only_matches[0]
+                end_m = (
+                    months_only_matches[1]
+                    if len(months_only_matches) > 1
+                    else months_only_matches[0]
+                )
                 end_date = f"{end_m} {start_y + 1}"
             elif highlight_years:
                 end_date = f"{start_date.split()[0]} {max(highlight_years)}"
@@ -186,6 +207,7 @@ def fix_work_dates(work_experience: list) -> list:
 
     return work_experience
 
+
 def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
     results = {}
 
@@ -205,13 +227,23 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
         try:
             logger.info(json.dumps(parsed_resume, ensure_ascii=False, indent=2))
         except Exception:
-            logger.info(json.dumps(make_safe_for_mongo(parsed_resume), ensure_ascii=False, indent=2))
+            logger.info(
+                json.dumps(
+                    make_safe_for_mongo(parsed_resume), ensure_ascii=False, indent=2
+                )
+            )
 
         # 2️⃣ 自动填充和合并基本信息
         structured_resume = auto_fill_fields(parsed_resume) or {}
-        structured_resume["name"] = structured_resume.get("name") or basic_info.get("name")
-        structured_resume["email"] = structured_resume.get("email") or basic_info.get("email")
-        structured_resume["phone"] = structured_resume.get("phone") or basic_info.get("phone")
+        structured_resume["name"] = structured_resume.get("name") or basic_info.get(
+            "name"
+        )
+        structured_resume["email"] = structured_resume.get("email") or basic_info.get(
+            "email"
+        )
+        structured_resume["phone"] = structured_resume.get("phone") or basic_info.get(
+            "phone"
+        )
 
         # 3️⃣ 清理和验证
         logger.info(f"Other after auto_fill_fields: {structured_resume.get('other')}")
@@ -226,7 +258,11 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
         # 5️⃣ 保存到数据库（传入安全化的对象）
         user_email = structured_resume.get("email") or safe_name
         try:
-            save_resume(user_id=user_email, file_name=safe_name + "_parsed", data=safe_resume_for_db)
+            save_resume(
+                user_id=user_email,
+                file_name=safe_name + "_parsed",
+                data=safe_resume_for_db,
+            )
             logger.info(f"Saved resume to MongoDB: {safe_name}_parsed")
         except Exception as e:
             logger.warning(f"Saving to MongoDB failed: {e}")
@@ -250,6 +286,7 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
         results[user_email] = safe_resume_for_db
 
     return results
+
 
 if __name__ == "__main__":
     files_to_process = ["Resume(AI).pdf"]

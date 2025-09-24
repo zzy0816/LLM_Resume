@@ -1,9 +1,11 @@
-import os
-import logging
-import json
-import random
 import datetime
+import json
+import logging
+import os
+import random
+
 from pymongo import MongoClient
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -12,9 +14,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -31,6 +34,7 @@ client = MongoClient("mongodb://localhost:27017/")
 db = client["resume_db"]
 collection = db["resumes"]
 
+
 def save_resume(user_id: str, file_name: str, data: dict):
     doc = {
         "user_id": user_id,
@@ -40,6 +44,7 @@ def save_resume(user_id: str, file_name: str, data: dict):
     }
     collection.insert_one(doc)
     logger.info("Saved resume to MongoDB: %s", file_name)
+
 
 def load_resume(user_id: str, file_name: str) -> dict | None:
     doc = collection.find_one({"user_id": user_id, "file_name": file_name})

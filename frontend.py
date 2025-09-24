@@ -1,13 +1,16 @@
-import sys
-import os
-import logging
 import json
+import logging
+import os
 import random
+import sys
+
 import requests
 import streamlit as st
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from app.storage.storage_client import StorageClient
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -16,9 +19,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -45,11 +49,7 @@ st.title("简历分析系统")
 # -----------------------------
 # 会话状态：避免脚本重跑丢失选择
 # -----------------------------
-for k, v in {
-    "file_name": "",
-    "local_path": None,
-    "mode": "MinIO 文件"
-}.items():
+for k, v in {"file_name": "", "local_path": None, "mode": "MinIO 文件"}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -67,26 +67,41 @@ except Exception as e:
 # -----------------------------
 # 文件来源选择
 # -----------------------------
-st.session_state.mode = st.radio("选择文件来源", ("MinIO 文件", "上传本地文件"), index=0)
+st.session_state.mode = st.radio(
+    "选择文件来源", ("MinIO 文件", "上传本地文件"), index=0
+)
 
 # ====== MinIO 文件模式 ======
 if st.session_state.mode == "MinIO 文件":
     with st.spinner("加载 MinIO 文件列表中..."):
         try:
             resp = s3.list_objects_v2(Bucket=bucket)
-            objects = [obj["Key"] for obj in resp.get("Contents", [])] if resp.get("KeyCount", 0) > 0 else []
+            objects = (
+                [obj["Key"] for obj in resp.get("Contents", [])]
+                if resp.get("KeyCount", 0) > 0
+                else []
+            )
         except Exception as e:
             objects = []
             st.error(f"读取 MinIO 文件列表失败：{e}")
 
     if objects:
         # 展示 .docx 和 .pdf 文件
-        valid_objects = [k for k in objects if k.lower().endswith((".docx", ".pdf"))] or objects
+        valid_objects = [
+            k for k in objects if k.lower().endswith((".docx", ".pdf"))
+        ] or objects
         selected = st.selectbox(
             "选择已有文件",
             valid_objects,
-            index=0 if st.session_state.file_name == "" else
-                max(0, valid_objects.index(st.session_state.file_name)) if st.session_state.file_name in valid_objects else 0
+            index=(
+                0
+                if st.session_state.file_name == ""
+                else (
+                    max(0, valid_objects.index(st.session_state.file_name))
+                    if st.session_state.file_name in valid_objects
+                    else 0
+                )
+            ),
         )
         st.session_state.file_name = selected
         st.session_state.local_path = None
@@ -118,11 +133,17 @@ else:
                 with st.spinner("正在上传到 MinIO..."):
                     try:
                         # 可能 StorageClient 内部吞异常，这里上传后主动校验
-                        client.upload_file(st.session_state.local_path, st.session_state.file_name)
+                        client.upload_file(
+                            st.session_state.local_path, st.session_state.file_name
+                        )
                         try:
                             # 上传后校验对象是否存在
-                            s3.head_object(Bucket=bucket, Key=st.session_state.file_name)
-                            st.success(f"✅ 已上传到 MinIO：{st.session_state.file_name}")
+                            s3.head_object(
+                                Bucket=bucket, Key=st.session_state.file_name
+                            )
+                            st.success(
+                                f"✅ 已上传到 MinIO：{st.session_state.file_name}"
+                            )
                         except Exception as he:
                             st.error(f"上传后校验失败，MinIO 中未找到对象：{he}")
                     except Exception as e:
@@ -133,6 +154,7 @@ else:
 # -----------------------------
 st.markdown("---")
 st.caption(f"当前选中文件：**{st.session_state.file_name or '（未选择）'}**")
+
 
 def _download_from_minio_to_local(key: str) -> str | None:
     """将 MinIO 中对象下载到本地 downloads 目录，返回本地路径或 None"""
@@ -145,6 +167,7 @@ def _download_from_minio_to_local(key: str) -> str | None:
     except Exception as e:
         st.error(f"下载 {key} 失败：{e}")
         return None
+
 
 # -----------------------------
 # 分析简历
@@ -165,7 +188,9 @@ if st.button("分析简历"):
             st.info(f"已下载到：{lp}")
     else:
         # 上传模式：已在本地
-        if not st.session_state.local_path or not os.path.exists(st.session_state.local_path):
+        if not st.session_state.local_path or not os.path.exists(
+            st.session_state.local_path
+        ):
             st.error("请先选择并上传本地文件。")
             st.stop()
 
@@ -175,7 +200,7 @@ if st.button("分析简历"):
             resp = requests.post(
                 "http://127.0.0.1:8000/analyze_resume",
                 json={"file_names": [st.session_state.file_name]},  # ✅ 改这里
-                timeout=60
+                timeout=60,
             )
         except requests.exceptions.ConnectionError as e:
             st.error(f"后端连接失败：{e}")
@@ -194,7 +219,9 @@ if st.button("分析简历"):
                 data = resp.json()
                 reports = data.get("reports", {})
             except Exception as e:
-                st.error(f"返回内容非 JSON 或解析失败：{e}\n原始内容：{resp.text[:500]}")
+                st.error(
+                    f"返回内容非 JSON 或解析失败：{e}\n原始内容：{resp.text[:500]}"
+                )
                 st.stop()
 
             st.success("✅ 简历分析完成")
@@ -219,11 +246,8 @@ if st.button("提交问题") and query_text:
             try:
                 resp = requests.post(
                     "http://127.0.0.1:8000/query_resume",
-                    json={
-                        "file_name": st.session_state.file_name,
-                        "query": query_text
-                    },
-                    timeout=60
+                    json={"file_name": st.session_state.file_name, "query": query_text},
+                    timeout=60,
                 )
             except requests.exceptions.ConnectionError as e:
                 st.error(f"后端连接失败：{e}")
@@ -241,7 +265,9 @@ if st.button("提交问题") and query_text:
                 try:
                     answer = resp.json().get("answer", "")
                 except Exception as e:
-                    st.error(f"返回内容非 JSON 或解析失败：{e}\n原始内容：{resp.text[:500]}")
+                    st.error(
+                        f"返回内容非 JSON 或解析失败：{e}\n原始内容：{resp.text[:500]}"
+                    )
                     st.stop()
 
                 st.subheader(f"答案（文件：{st.session_state.file_name}）")

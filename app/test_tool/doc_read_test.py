@@ -1,19 +1,26 @@
-import sys
-import os
+import json
 import logging
+import os
+import random
+import sys
+
 import fitz
 import pdfplumber
 import torch
-import json
-import random
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from docx import Document as DocxDocument
-
 from PIL import Image
-from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
-from transformers import DonutProcessor, VisionEncoderDecoderModel
+from transformers import (
+    DonutProcessor,
+    LayoutLMv3ForTokenClassification,
+    LayoutLMv3Processor,
+    VisionEncoderDecoderModel,
+)
+
 from app.qre.doc_split import render_paragraphs_to_image  # 避免循环引用
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -22,9 +29,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -51,21 +59,31 @@ _donut_processor = None
 _donut_model = None
 _USE_DONUT = None
 
+
 def _load_layoutlm():
     global _layout_processor, _layout_model, _USE_LAYOUTLM
     if _layout_processor is None or _layout_model is None:
-        if LayoutLMv3Processor is None or LayoutLMv3ForTokenClassification is None or fitz is None:
+        if (
+            LayoutLMv3Processor is None
+            or LayoutLMv3ForTokenClassification is None
+            or fitz is None
+        ):
             _USE_LAYOUTLM = False
             return None, None, _USE_LAYOUTLM
         try:
-            _layout_processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
-            _layout_model = LayoutLMv3ForTokenClassification.from_pretrained("microsoft/layoutlmv3-base").to(DEVICE)
+            _layout_processor = LayoutLMv3Processor.from_pretrained(
+                "microsoft/layoutlmv3-base"
+            )
+            _layout_model = LayoutLMv3ForTokenClassification.from_pretrained(
+                "microsoft/layoutlmv3-base"
+            ).to(DEVICE)
             _USE_LAYOUTLM = True
             logger.info("LayoutLMv3 loaded (lazy load).")
         except Exception as e:
             logger.warning(f"LayoutLMv3 init failed: {e}")
             _USE_LAYOUTLM = False
     return _layout_processor, _layout_model, _USE_LAYOUTLM
+
 
 def _load_donut():
     global _donut_processor, _donut_model, _USE_DONUT
@@ -74,8 +92,12 @@ def _load_donut():
             _USE_DONUT = False
             return None, None, _USE_DONUT
         try:
-            _donut_processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base")
-            _donut_model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base").to(DEVICE)
+            _donut_processor = DonutProcessor.from_pretrained(
+                "naver-clova-ix/donut-base"
+            )
+            _donut_model = VisionEncoderDecoderModel.from_pretrained(
+                "naver-clova-ix/donut-base"
+            ).to(DEVICE)
             _USE_DONUT = True
             logger.info("Donut loaded (lazy load).")
         except Exception as e:
@@ -83,22 +105,32 @@ def _load_donut():
             _USE_DONUT = False
     return _donut_processor, _donut_model, _USE_DONUT
 
+
 # -------------------------
 # DOCX 读取
 # -------------------------
 def read_docx_paragraphs(docx_path: str):
     from doc_split_test import render_paragraphs_to_image  # 避免循环引用
-    paragraphs = [p.text.strip() for p in DocxDocument(docx_path).paragraphs if p.text.strip()]
+
+    paragraphs = [
+        p.text.strip() for p in DocxDocument(docx_path).paragraphs if p.text.strip()
+    ]
 
     donut_processor, donut_model, USE_DONUT = _load_donut()
     if USE_DONUT:
         try:
             img = render_paragraphs_to_image(paragraphs)
             if img is not None:
-                pixel_values = donut_processor(images=img, return_tensors="pt").pixel_values.to(DEVICE)
+                pixel_values = donut_processor(
+                    images=img, return_tensors="pt"
+                ).pixel_values.to(DEVICE)
                 outputs = donut_model.generate(pixel_values, max_length=1024)
-                decoded = donut_processor.batch_decode(outputs, skip_special_tokens=True)[0]
-                donut_paras = [line.strip() for line in decoded.split("\n") if line.strip()]
+                decoded = donut_processor.batch_decode(
+                    outputs, skip_special_tokens=True
+                )[0]
+                donut_paras = [
+                    line.strip() for line in decoded.split("\n") if line.strip()
+                ]
                 if donut_paras:
                     paragraphs = donut_paras
                     logger.info("DOCX parsed by Donut, paragraphs=%d", len(paragraphs))
@@ -107,6 +139,7 @@ def read_docx_paragraphs(docx_path: str):
 
     logger.info("DOCX split into %d paragraphs", len(paragraphs))
     return paragraphs
+
 
 # -------------------------
 # PDF 读取
@@ -122,6 +155,7 @@ def normalize_box(x0, y0, x1, y1, page_width, page_height):
     except Exception:
         return [0, 0, 1000, 1000]
 
+
 def read_pdf_paragraphs(pdf_path: str):
     paragraphs = []
     layout_processor, layout_model, USE_LAYOUTLM = _load_layoutlm()
@@ -136,16 +170,29 @@ def read_pdf_paragraphs(pdf_path: str):
                 if not words:
                     continue
                 words_text = [w[4] for w in words]
-                boxes = [normalize_box(w[0], w[1], w[2], w[3], page.rect.width, page.rect.height) for w in words]
+                boxes = [
+                    normalize_box(
+                        w[0], w[1], w[2], w[3], page.rect.width, page.rect.height
+                    )
+                    for w in words
+                ]
                 encoding = layout_processor(
-                    images=img, words=words_text, boxes=boxes,
-                    return_tensors="pt", truncation=True, padding="max_length"
+                    images=img,
+                    words=words_text,
+                    boxes=boxes,
+                    return_tensors="pt",
+                    truncation=True,
+                    padding="max_length",
                 )
                 if DEVICE == "cuda":
                     encoding = {k: v.to(DEVICE) for k, v in encoding.items()}
                 outputs = layout_model(**encoding)
                 token_preds = outputs.logits.argmax(-1)[0].cpu().tolist()
-                words_out = [words_text[i] for i in range(len(words_text)) if i < len(token_preds) and token_preds[i] > 0]
+                words_out = [
+                    words_text[i]
+                    for i in range(len(words_text))
+                    if i < len(token_preds) and token_preds[i] > 0
+                ]
                 paragraphs.extend([" ".join(words_out)])
             doc.close()
             logger.info("PDF parsed by LayoutLMv3, paragraphs=%d", len(paragraphs))
@@ -160,12 +207,15 @@ def read_pdf_paragraphs(pdf_path: str):
             for page in pdf.pages:
                 text = page.extract_text()
                 if text:
-                    paragraphs.extend([p.strip() for p in text.split("\n") if p.strip()])
+                    paragraphs.extend(
+                        [p.strip() for p in text.split("\n") if p.strip()]
+                    )
         logger.info("PDF fallback split into %d paragraphs", len(paragraphs))
     except Exception as e:
         logger.error("pdfplumber failed. Error: %s", e)
 
     return paragraphs
+
 
 # -------------------------
 # 统一接口

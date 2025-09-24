@@ -1,8 +1,10 @@
-import os
-import logging
 import json
+import logging
+import os
 import random
-from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
+
+from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -11,9 +13,10 @@ class JsonFormatter(logging.Formatter):
             "level": record.levelname,
             "service": "ner_service",
             "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999))
+            "request_id": str(random.randint(1000, 9999)),
         }
         return json.dumps(log)
+
 
 # 确保 logs 目录存在
 os.makedirs("logs", exist_ok=True)
@@ -31,18 +34,22 @@ logger.setLevel(logging.INFO)
 # -------------------------
 _ner_pipeline = None
 
+
 def get_ner_pipeline():
     """懒加载 NER pipeline，singleton，保证只初始化一次"""
     global _ner_pipeline
     if _ner_pipeline is None:
         logger.info("Loading NER model for the first time...")
         tokenizer = AutoTokenizer.from_pretrained("yashpwr/resume-ner-bert-v2")
-        model = AutoModelForTokenClassification.from_pretrained("yashpwr/resume-ner-bert-v2")
+        model = AutoModelForTokenClassification.from_pretrained(
+            "yashpwr/resume-ner-bert-v2"
+        )
         _ner_pipeline = pipeline(
             "ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple"
         )
         logger.info("NER model loaded successfully.")
     return _ner_pipeline
+
 
 # -------------------------
 # 批量 NER
