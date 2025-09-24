@@ -20,42 +20,70 @@ Set-Location "$ProjectRoot\elk"
 docker-compose up -d
 
 # -----------------------------
-# Step 3: Wait for services
+# Step 3: Wait for Elasticsearch to be ready
 # -----------------------------
-Write-Output "[INIT] Waiting for services (30s)..."
-Start-Sleep -Seconds 30
+Write-Output "[INIT] Waiting for Elasticsearch to start..."
+$maxRetries = 12
+$retryCount = 0
+$esRunning = $false
 
-# -----------------------------
-# Step 4: Check Elasticsearch status
-# -----------------------------
-Write-Output "[INIT] Checking Elasticsearch status..."
-try {
-    Invoke-WebRequest -Uri "http://localhost:9200" -UseBasicParsing | Out-Null
-} catch {
-    Write-Output "[ERROR] Elasticsearch not running. Please check docker logs elasticsearch"
+do {
+    Start-Sleep -Seconds 5
+    try {
+        Invoke-WebRequest -Uri "http://localhost:9200" -UseBasicParsing | Out-Null
+        $esRunning = $true
+    } catch {
+        $retryCount++
+        Write-Output "[INIT] Elasticsearch not ready yet, retry $retryCount/$maxRetries..."
+    }
+} while (-Not $esRunning -and $retryCount -lt $maxRetries)
+
+if (-Not $esRunning) {
+    Write-Output "[ERROR] Elasticsearch did not start. Check docker logs for details."
     exit 1
+} else {
+    Write-Output "[INIT] Elasticsearch is running."
 }
 
 # -----------------------------
-# Step 5: Register Kibana index pattern
+# Step 4: Register Kibana index pattern
 # -----------------------------
 Write-Output "[INIT] Registering Kibana index pattern..."
 try {
-    Invoke-RestMethod -Uri "http://localhost:5601/api/saved_objects/index-pattern" `
-        -Method Post `
-        -Headers @{ "kbn-xsrf" = "true"; "Content-Type" = "application/json" } `
-        -Body '{"attributes":{"title":"app-logs-*","timeFieldName":"timestamp"}}'
+    $existing = Invoke-RestMethod -Uri "http://localhost:5601/api/saved_objects/index-pattern/app-logs-*" -Method Get -UseBasicParsing -ErrorAction SilentlyContinue
 } catch {
-    Write-Output "[WARN] Index pattern may already exist"
+    $existing = $null
+}
+
+if (-Not $existing) {
+    try {
+        Invoke-RestMethod -Uri "http://localhost:5601/api/saved_objects/index-pattern" `
+            -Method Post `
+            -Headers @{ "kbn-xsrf" = "true"; "Content-Type" = "application/json" } `
+            -Body '{"attributes":{"title":"app-logs-*","timeFieldName":"timestamp"}}'
+        Write-Output "[INIT] Index pattern 'app-logs-*' created."
+    } catch {
+        Write-Output "[WARN] Failed to create index pattern, it may already exist."
+    }
+} else {
+    Write-Output "[INIT] Index pattern 'app-logs-*' already exists."
 }
 
 # -----------------------------
-# Step 6: Run Python script to generate logs
+# Step 5: Run Python script to generate logs
 # -----------------------------
-Write-Output "[INIT] Running Python script..."
+Write-Output "[INIT] Running Python script to generate logs..."
 Set-Location $ProjectRoot
-python ".\app\pipline\main.py"
+try {
+    python ".\app\test_tool\parser_test.py"
+    Write-Output "[INIT] Python script executed successfully."
+} catch {
+    Write-Output "[WARN] Python script failed: $_"
+}
 
+# -----------------------------
+# Step 6: Done
+# -----------------------------
 Write-Output "[DONE] Initialization complete!"
 Write-Output "Open Kibana: http://localhost:5601"
 Write-Output "In Discover, select index pattern: app-logs-*"
