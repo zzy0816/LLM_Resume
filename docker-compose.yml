@@ -1,0 +1,68 @@
+
+services:
+  # -----------------------
+  # MinIO
+  # -----------------------
+  minio:
+    image: quay.io/minio/minio
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin123
+    volumes:
+      - //d/project/LLM_Resume/minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # -----------------------
+  # Elasticsearch
+  # -----------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.13
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+
+  # -----------------------
+  # Kibana
+  # -----------------------
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.17.13
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+
+  # -----------------------
+  # Logstash
+  # -----------------------
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.17.13
+    container_name: logstash
+    ports:
+      - "5044:5044"
+    volumes:
+      - ./elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    depends_on:
+      - elasticsearch
+
+  # -----------------------
+  # Filebeat
+  # -----------------------
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:7.17.13
+    volumes:
+      - ./logs:/logs:ro
+      - ./elk/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+    depends_on:
+      - elasticsearch
+      - logstash
+    command: ["--strict.perms=false"]
