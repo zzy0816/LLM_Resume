@@ -322,20 +322,22 @@ def main_pipeline(
 # ------------------------
 # 主函数
 # ------------------------
-def test_main_pipeline_runs():
-    """
-    测试 main_pipeline 是否能成功处理示例简历文件并返回结果结构。
-    """
-    files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
-    results = main_pipeline(files_to_process, mode="exact")
+import pytest
+from unittest.mock import patch
 
-    # 基本断言：返回字典，且每个文件名有对应结构化结果
+def test_main_pipeline_runs(monkeypatch):
+    files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
+
+    # mock save_resume，避免连接 MongoDB
+    with patch("app.storage.db.save_resume") as mock_save:
+        mock_save.return_value = None
+        results = main_pipeline(files_to_process, mode="exact")
+
     assert isinstance(results, dict)
     for file_name in files_to_process:
         safe_name = file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
         assert safe_name in results
         structured_resume = results[safe_name]
-        # 结构化结果包含关键字段
         assert "name" in structured_resume
         assert "work_experience" in structured_resume
         assert "projects" in structured_resume
