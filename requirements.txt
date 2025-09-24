@@ -16,3 +16,6 @@ pymongo
 black
 isort
 flake8
+pytest
+pytest-html
+PyMuPDF
