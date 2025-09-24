@@ -4,7 +4,7 @@ import os
 import random
 import sys
 
-import fitz # PyMuPDF
+import fitz
 import pdfplumber
 import torch
 

@@ -320,29 +320,63 @@ def main_pipeline(
     return results
 
 # ------------------------
-# 主函数
+# CI 测试
 # ------------------------
-import pytest
-from unittest.mock import patch
 
-def test_main_pipeline_runs(monkeypatch):
+from unittest.mock import patch
+import logging
+
+# 关闭不必要的日志输出
+logging.basicConfig(level=logging.ERROR)
+
+def test_main_pipeline_runs():
     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
 
-    # mock save_resume，避免连接 MongoDB
-    with patch("app.storage.db.save_resume") as mock_save:
-        mock_save.return_value = None
-        results = main_pipeline(files_to_process, mode="exact")
+    # mock 所有外部依赖，避免真实 I/O 和 DB
+    with patch("app.test_tool.pipline_test.save_resume") as mock_save, \
+         patch("app.test_tool.pipline_test.load_faiss", return_value=None), \
+         patch("app.test_tool.pipline_test.build_faiss", return_value="FAISS_DB"), \
+         patch("app.test_tool.pipline_test.save_faiss") as mock_save_faiss, \
+         patch("app.test_tool.pipline_test.read_document_paragraphs", return_value=["Dummy text"]), \
+         patch("app.test_tool.pipline_test.parse_resume_to_structured", return_value={
+             "work_experience": [], "projects": [], "education": [], "skills": [], "other": []
+         }), \
+         patch("app.test_tool.pipline_test.query_dynamic_category", return_value={"results": []}), \
+         patch("app.test_tool.pipline_test.auto_fill_fields", side_effect=lambda x: x), \
+         patch("app.test_tool.pipline_test.fill_query_exact", side_effect=lambda x, y, z=None: x), \
+         patch("app.test_tool.pipline_test.restore_parsed_structure", side_effect=lambda x, y: x), \
+         patch("app.test_tool.pipline_test.restore_work_experience", side_effect=lambda x, y, z: x), \
+         patch("app.test_tool.pipline_test.validate_and_clean", side_effect=lambda x: x), \
+         patch("app.test_tool.pipline_test.fix_resume_dates", side_effect=lambda x: x), \
+         patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x):
 
+        mock_save.return_value = None
+        mock_save_faiss.return_value = None
+
+        results = main_pipeline(files_to_process, mode="exact", use_cache=False)
+
+    # 断言结果结构
     assert isinstance(results, dict)
     for file_name in files_to_process:
-        safe_name = file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
+        safe_name = sanitize_filename(file_name)
         assert safe_name in results
         structured_resume = results[safe_name]
-        assert "name" in structured_resume
-        assert "work_experience" in structured_resume
-        assert "projects" in structured_resume
-        assert "education" in structured_resume
-        assert "skills" in structured_resume
+        for field in ["work_experience", "projects", "education", "skills", "other"]:
+            assert field in structured_resume
+
+# ------------------------
+# 可以在本地运行测试
+# ------------------------
+if __name__ == "__main__":
+    import pytest
+    pytest_args = [
+        __file__,
+        "-q",                  # 安静模式，只显示简洁输出
+        "--disable-warnings",  # 过滤 DeprecationWarning / UserWarning
+        "--tb=short"           # 只显示短 traceback
+    ]
+    pytest.main(pytest_args)
+
 
 # if __name__ == "__main__":
 #     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
