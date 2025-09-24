@@ -12,7 +12,7 @@ jobs:
     steps:
       # 1️⃣ Checkout
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2️⃣ Setup Python
       - name: Setup Python
@@ -41,7 +41,7 @@ jobs:
       - name: Run tests
         run: pytest test_tool/ --maxfail=1 --disable-warnings --html=report.html
       - name: Upload test report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pytest-report
           path: report.html
@@ -53,7 +53,7 @@ jobs:
     steps:
       # 1️⃣ Checkout
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2️⃣ Verify docker-compose.yml
       - name: Validate docker-compose.yml
@@ -64,7 +64,7 @@ jobs:
         run: |
           docker compose build 2>&1 | tee docker_build.log
       - name: Upload docker build logs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-build-log
           path: docker_build.log
