@@ -319,18 +319,37 @@ def main_pipeline(
 
     return results
 
-
 # ------------------------
 # 主函数
 # ------------------------
-if __name__ == "__main__":
+def test_main_pipeline_runs():
+    """
+    测试 main_pipeline 是否能成功处理示例简历文件并返回结果结构。
+    """
     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
-    all_results = main_pipeline(files_to_process, mode="exact")
+    results = main_pipeline(files_to_process, mode="exact")
 
-    for file_name, structured_resume in all_results.items():
-        logger.info(
-            f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} ====="
-        )
-        logger.info(
-            json.dumps(structured_resume, ensure_ascii=False, indent=2)
-        )
+    # 基本断言：返回字典，且每个文件名有对应结构化结果
+    assert isinstance(results, dict)
+    for file_name in files_to_process:
+        safe_name = file_name.replace("(", "_").replace(")", "_").replace(" ", "_")
+        assert safe_name in results
+        structured_resume = results[safe_name]
+        # 结构化结果包含关键字段
+        assert "name" in structured_resume
+        assert "work_experience" in structured_resume
+        assert "projects" in structured_resume
+        assert "education" in structured_resume
+        assert "skills" in structured_resume
+
+# if __name__ == "__main__":
+#     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
+#     all_results = main_pipeline(files_to_process, mode="exact")
+
+#     for file_name, structured_resume in all_results.items():
+#         logger.info(
+#             f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} ====="
+#         )
+#         logger.info(
+#             json.dumps(structured_resume, ensure_ascii=False, indent=2)
+#         )

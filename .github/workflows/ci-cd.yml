@@ -44,15 +44,14 @@ jobs:
       - name: List project structure
         run: ls -R
 
-      # 6️⃣ Run tests if directory exists
+      # 6️⃣ Run tests and save HTML report
       - name: Run tests
         run: |
-          if [ -d "app/test_tool" ]; then
-            echo "✅ Found app/test_tool, running pytest..."
-            pytest app/test_tool --maxfail=1 --disable-warnings --html=report.html
+          if [ -f "app/test_tool/pipline_test.py" ]; then
+            echo "✅ Found pipline_test.py, running pytest..."
+            pytest app/test_tool/pipline_test.py --maxfail=1 --disable-warnings --html=report.html
           else
-            echo "⚠️ No test_tool directory found, skipping tests."
-            echo "<html><body><h2>No tests found</h2></body></html>" > report.html
+            echo "⚠️ pipline_test.py not found, skipping tests"
           fi
 
       - name: Upload test report
