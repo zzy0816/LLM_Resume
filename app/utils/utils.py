@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import os
@@ -359,7 +360,6 @@ def merge_dicts(d1: dict, d2: dict) -> dict:
     - 如果 key 对应值都是 list，则合并去重
     - 其他类型，使用 d2 覆盖 d1
     """
-    import copy
 
     result = copy.deepcopy(d1)
 

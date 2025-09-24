@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import pprint
 import random
 import sys
 
@@ -10,6 +11,8 @@ from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from sentence_transformers import SentenceTransformer
+
+from app.qre.query import query_dynamic_category
 
 
 class JsonFormatter(logging.Formatter):
@@ -96,7 +99,6 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
 
 
 if __name__ == "__main__":
-    import pprint
 
     # 模拟一个结构化简历
     test_resume = {
@@ -145,7 +147,6 @@ if __name__ == "__main__":
 
     # 查询测试
     test_query = "work_experience"
-    from app.qre.query import query_dynamic_category
 
     results = query_dynamic_category(db, test_resume, test_query, top_k=3)
     pprint.pprint(results)

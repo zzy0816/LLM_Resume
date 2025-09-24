@@ -43,7 +43,6 @@ logger.setLevel(logging.INFO)
 # 测试 FAISS 构建和查询
 # ------------------------
 def build_test_faiss(structured_resume):
-    from sentence_transformers import SentenceTransformer
 
     docs = []
     for cat in ["work_experience", "projects", "education", "skills", "other"]:
@@ -135,7 +134,6 @@ def test_faiss(parsed_json_file: str):
 # 脚本入口
 # ------------------------
 if __name__ == "__main__":
-    import os
 
     print("CWD:", os.getcwd())
     print("Exists:", os.path.exists(r"data\classified\Resume_AI_.pdf_parsed.json"))

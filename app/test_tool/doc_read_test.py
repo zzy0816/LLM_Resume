@@ -110,7 +110,6 @@ def _load_donut():
 # DOCX 读取
 # -------------------------
 def read_docx_paragraphs(docx_path: str):
-    from doc_split_test import render_paragraphs_to_image  # 避免循环引用
 
     paragraphs = [
         p.text.strip() for p in DocxDocument(docx_path).paragraphs if p.text.strip()

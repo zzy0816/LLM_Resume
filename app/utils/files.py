@@ -2,8 +2,9 @@ import json
 import logging
 import os
 import random
-import re
 import sys
+
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
@@ -84,7 +85,6 @@ def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
 # -------------------------
 # embed 保存 & 加载
 # -------------------------
-import numpy as np
 
 
 def save_embeddings(file_name, embs):

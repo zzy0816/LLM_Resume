@@ -13,3 +13,5 @@ python-docx
 ollama
 streamlit
 pymongo
+black
+isort
