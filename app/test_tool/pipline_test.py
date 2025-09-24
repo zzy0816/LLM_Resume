@@ -325,34 +325,48 @@ def main_pipeline(
 
 from unittest.mock import patch
 import logging
+import importlib
+
 import pytest
+import mongomock
+import pymongo
 
 # 关闭不必要的日志输出
 logging.basicConfig(level=logging.ERROR)
 
-def test_main_pipeline_runs():
+# 导入需要测试的函数和帮助函数（保证这里导入后再重载 db 模块）
+from app.test_tool.pipline_test import main_pipeline, sanitize_filename  # 如果 main_pipeline 在同一文件，请改为相对导入
+import app.storage.db as db_module  # 我们将重载这个模块使其使用 mongomock
+
+
+def test_main_pipeline_runs_with_mongomock():
     files_to_process = ["Resume(AI).pdf", "Resume(AI).docx"]
 
-    with patch("app.test_tool.pipline_test.save_resume") as mock_save, \
-         patch("app.test_tool.pipline_test.save_faiss") as mock_save_faiss, \
-         patch("app.test_tool.pipline_test.read_document_paragraphs", return_value=["Dummy text"]), \
-         patch("app.test_tool.pipline_test.parse_resume_to_structured", return_value={
-             "work_experience": [], "projects": [], "education": [], "skills": [], "other": []
-         }), \
-         patch("app.test_tool.pipline_test.query_dynamic_category", return_value={"results": []}), \
-         patch("app.test_tool.pipline_test.auto_fill_fields", side_effect=lambda x: x), \
-         patch("app.test_tool.pipline_test.fill_query_exact", side_effect=lambda x, y, z=None: x), \
-         patch("app.test_tool.pipline_test.restore_parsed_structure", side_effect=lambda x, y: x), \
-         patch("app.test_tool.pipline_test.restore_work_experience", side_effect=lambda x, y, z: x), \
-         patch("app.test_tool.pipline_test.validate_and_clean", side_effect=lambda x: x), \
-         patch("app.test_tool.pipline_test.fix_resume_dates", side_effect=lambda x: x), \
-         patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x), \
-         patch("pymongo.MongoClient"):  # 屏蔽真实 MongoDB
+    # 1) 用 mongomock 替换 pymongo.MongoClient，并重载 app.storage.db（保证 module-level client 用到 mongomock）
+    with patch("pymongo.MongoClient", new=mongomock.MongoClient):
+        importlib.reload(db_module)
 
-        mock_save.return_value = None
-        mock_save_faiss.return_value = None
+        # 2) mock 其余外部依赖（保持在 pipline_test 模块中被调用位置的 patch 路径）
+        with patch("app.test_tool.pipline_test.save_resume") as mock_save, \
+             patch("app.test_tool.pipline_test.save_faiss") as mock_save_faiss, \
+             patch("app.test_tool.pipline_test.read_document_paragraphs", return_value=["Dummy text"]), \
+             patch("app.test_tool.pipline_test.parse_resume_to_structured", return_value={
+                 "work_experience": [], "projects": [], "education": [], "skills": [], "other": []
+             }), \
+             patch("app.test_tool.pipline_test.query_dynamic_category", return_value={"results": []}), \
+             patch("app.test_tool.pipline_test.auto_fill_fields", side_effect=lambda x: x), \
+             patch("app.test_tool.pipline_test.fill_query_exact", side_effect=lambda x, y, z=None: x), \
+             patch("app.test_tool.pipline_test.restore_parsed_structure", side_effect=lambda x, y: x), \
+             patch("app.test_tool.pipline_test.restore_work_experience", side_effect=lambda x, y, z: x), \
+             patch("app.test_tool.pipline_test.validate_and_clean", side_effect=lambda x: x), \
+             patch("app.test_tool.pipline_test.fix_resume_dates", side_effect=lambda x: x), \
+             patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x):
 
-        results = main_pipeline(files_to_process, mode="exact", use_cache=False)
+            mock_save.return_value = None
+            mock_save_faiss.return_value = None
+
+            # 运行 pipeline（此时内部对 Mongo 的访问会走 mongomock）
+            results = main_pipeline(files_to_process, mode="exact", use_cache=False)
 
     # 断言结果结构
     assert isinstance(results, dict)
@@ -363,17 +377,9 @@ def test_main_pipeline_runs():
         for field in ["work_experience", "projects", "education", "skills", "other"]:
             assert field in structured_resume
 
-# ------------------------
-# 可以在本地运行测试
-# ------------------------
+
 if __name__ == "__main__":
-    pytest_args = [
-        __file__,
-        "-q",                  # 安静模式
-        "--disable-warnings",  # 过滤警告
-        "--tb=short"           # 简洁 traceback
-    ]
-    pytest.main(pytest_args)
+    pytest.main([__file__, "-q", "--disable-warnings", "--tb=short"])
 
 
 # if __name__ == "__main__":
