@@ -7,7 +7,9 @@ import sys
 import requests
 import streamlit as st
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from app.storage.storage_client import StorageClient
 
@@ -38,7 +40,9 @@ logger.setLevel(logging.INFO)
 # -----------------------------
 # 基础初始化
 # -----------------------------
-st.set_page_config(page_title="简历分析系统", page_icon="📝", layout="centered")
+st.set_page_config(
+    page_title="简历分析系统", page_icon="📝", layout="centered"
+)
 
 # 本地下载目录
 DOWNLOADS_DIR = "./downloads"
@@ -49,7 +53,11 @@ st.title("简历分析系统")
 # -----------------------------
 # 会话状态：避免脚本重跑丢失选择
 # -----------------------------
-for k, v in {"file_name": "", "local_path": None, "mode": "MinIO 文件"}.items():
+for k, v in {
+    "file_name": "",
+    "local_path": None,
+    "mode": "MinIO 文件",
+}.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
@@ -111,7 +119,9 @@ if st.session_state.mode == "MinIO 文件":
 
 # ====== 上传本地文件模式 ======
 else:
-    uploaded_file = st.file_uploader("上传简历（.docx/.pdf）", type=["docx", "pdf"])
+    uploaded_file = st.file_uploader(
+        "上传简历（.docx/.pdf）", type=["docx", "pdf"]
+    )
     if uploaded_file is not None:
         # 先写到本地
         local_path = os.path.join(DOWNLOADS_DIR, uploaded_file.name)
@@ -134,7 +144,8 @@ else:
                     try:
                         # 可能 StorageClient 内部吞异常，这里上传后主动校验
                         client.upload_file(
-                            st.session_state.local_path, st.session_state.file_name
+                            st.session_state.local_path,
+                            st.session_state.file_name,
                         )
                         try:
                             # 上传后校验对象是否存在
@@ -145,7 +156,9 @@ else:
                                 f"✅ 已上传到 MinIO：{st.session_state.file_name}"
                             )
                         except Exception as he:
-                            st.error(f"上传后校验失败，MinIO 中未找到对象：{he}")
+                            st.error(
+                                f"上传后校验失败，MinIO 中未找到对象：{he}"
+                            )
                     except Exception as e:
                         st.error(f"上传到 MinIO 失败：{e}")
 
@@ -246,7 +259,10 @@ if st.button("提交问题") and query_text:
             try:
                 resp = requests.post(
                     "http://127.0.0.1:8000/query_resume",
-                    json={"file_name": st.session_state.file_name, "query": query_text},
+                    json={
+                        "file_name": st.session_state.file_name,
+                        "query": query_text,
+                    },
                     timeout=60,
                 )
             except requests.exceptions.ConnectionError as e:

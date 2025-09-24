@@ -82,7 +82,11 @@ def analyze_resume(req: ResumeRequest):
     os.makedirs(downloads_dir, exist_ok=True)
 
     # 统一成列表处理
-    file_list = req.file_names if isinstance(req.file_names, list) else [req.file_names]
+    file_list = (
+        req.file_names
+        if isinstance(req.file_names, list)
+        else [req.file_names]
+    )
 
     # 下载文件到本地
     for file_name in file_list:

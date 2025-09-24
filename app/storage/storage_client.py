@@ -64,7 +64,11 @@ class StorageClient:
             logger.error(f"检查/创建 bucket 出错: {e}")
 
     def upload_file(
-        self, file_path: str, object_name: str = None, retries: int = 3, delay: int = 2
+        self,
+        file_path: str,
+        object_name: str = None,
+        retries: int = 3,
+        delay: int = 2,
     ):
         """上传单个文件，带重试和分块支持"""
         object_name = object_name or os.path.basename(file_path)
@@ -83,7 +87,9 @@ class StorageClient:
                 logger.info(f"Uploaded {file_path} as {object_name}")
                 return True
             except (EndpointConnectionError, ClientError) as e:
-                logger.warning(f"Attempt {attempt} failed for {file_path}: {e}")
+                logger.warning(
+                    f"Attempt {attempt} failed for {file_path}: {e}"
+                )
                 time.sleep(delay)
             except Exception as e:
                 logger.error(f"Unhandled error uploading {file_path}: {e}")
@@ -95,7 +101,9 @@ class StorageClient:
         """并发上传多个文件，单文件失败不影响其他文件"""
         results = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(self.upload_file, f): f for f in file_paths}
+            futures = {
+                executor.submit(self.upload_file, f): f for f in file_paths
+            }
             for fut in futures:
                 file = futures[fut]
                 try:
@@ -107,7 +115,11 @@ class StorageClient:
         return results
 
     def read_file(
-        self, object_name: str, local_path: str = None, retries: int = 3, delay: int = 2
+        self,
+        object_name: str,
+        local_path: str = None,
+        retries: int = 3,
+        delay: int = 2,
     ) -> str:
         """读取文件并保存到本地，带重试和缓存"""
         local_path = local_path or object_name
@@ -123,7 +135,9 @@ class StorageClient:
                 logger.info(f"Downloaded {object_name} to {local_path}")
                 return local_path
             except (EndpointConnectionError, ClientError) as e:
-                logger.warning(f"Attempt {attempt} failed for {object_name}: {e}")
+                logger.warning(
+                    f"Attempt {attempt} failed for {object_name}: {e}"
+                )
                 time.sleep(delay)
             except Exception as e:
                 logger.error(f"Unhandled error downloading {object_name}: {e}")

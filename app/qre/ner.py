@@ -3,7 +3,11 @@ import logging
 import os
 import random
 
-from transformers import AutoModelForTokenClassification, AutoTokenizer, pipeline
+from transformers import (
+    AutoModelForTokenClassification,
+    AutoTokenizer,
+    pipeline,
+)
 
 
 class JsonFormatter(logging.Formatter):
@@ -45,7 +49,10 @@ def get_ner_pipeline():
             "yashpwr/resume-ner-bert-v2"
         )
         _ner_pipeline = pipeline(
-            "ner", model=model, tokenizer=tokenizer, aggregation_strategy="simple"
+            "ner",
+            model=model,
+            tokenizer=tokenizer,
+            aggregation_strategy="simple",
         )
         logger.info("NER model loaded successfully.")
     return _ner_pipeline

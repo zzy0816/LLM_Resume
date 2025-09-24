@@ -6,7 +6,9 @@ import sys
 
 import torch
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from sentence_transformers import SentenceTransformer, util
 
@@ -54,7 +56,9 @@ CATEGORY_EMBS = {
 }
 
 
-def semantic_fallback(paragraphs: list[str], file_name: str = None) -> list[str]:
+def semantic_fallback(
+    paragraphs: list[str], file_name: str = None
+) -> list[str]:
     """
     批量语义回退分类，支持缓存 embeddings
     """

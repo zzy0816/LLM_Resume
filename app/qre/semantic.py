@@ -5,7 +5,9 @@ import pprint
 import random
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
@@ -48,7 +50,9 @@ class SemanticModelSingleton:
     @classmethod
     def get_sentence_model(cls):
         if cls._sentence_model is None:
-            logger.info("Loading SentenceTransformer model for the first time...")
+            logger.info(
+                "Loading SentenceTransformer model for the first time..."
+            )
             cls._sentence_model = SentenceTransformer(
                 "sentence-transformers/all-MiniLM-L6-v2"
             )
@@ -58,7 +62,9 @@ class SemanticModelSingleton:
     @classmethod
     def get_embeddings_model(cls):
         if cls._embeddings_model is None:
-            logger.info("Loading HuggingFaceEmbeddings model for the first time...")
+            logger.info(
+                "Loading HuggingFaceEmbeddings model for the first time..."
+            )
             cls._embeddings_model = HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
@@ -74,7 +80,13 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
     user_email = structured_resume.get("email", "unknown")
     logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {user_email}")
 
-    categories = ["work_experience", "projects", "education", "skills", "other"]
+    categories = [
+        "work_experience",
+        "projects",
+        "education",
+        "skills",
+        "other",
+    ]
 
     for cat in categories:
         entries = structured_resume.get(cat, [])

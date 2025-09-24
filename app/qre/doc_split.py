@@ -63,7 +63,9 @@ def render_paragraphs_to_image(
 
     try:
         font = (
-            ImageFont.truetype(font_path, 14) if font_path else ImageFont.load_default()
+            ImageFont.truetype(font_path, 14)
+            if font_path
+            else ImageFont.load_default()
         )
     except Exception:
         font = ImageFont.load_default()

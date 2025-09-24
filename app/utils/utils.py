@@ -30,7 +30,9 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
+ACTION_RE = re.compile(
+    r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I
+)
 POSITION_KEYWORDS = [
     "intern",
     "engineer",
@@ -209,9 +211,15 @@ def auto_fill_fields(structured_resume: dict) -> dict:
         structured_resume[cat] = new_entries
 
     # 顶层技能
-    if "skills" in structured_resume and isinstance(structured_resume["skills"], list):
+    if "skills" in structured_resume and isinstance(
+        structured_resume["skills"], list
+    ):
         structured_resume["skills"] = normalize_skills(
-            [s for s in structured_resume["skills"] if isinstance(s, str) and s.strip()]
+            [
+                s
+                for s in structured_resume["skills"]
+                if isinstance(s, str) and s.strip()
+            ]
         )
 
     return structured_resume
@@ -397,7 +405,9 @@ def extract_email(text: str) -> Optional[str]:
 
 def extract_phone(text: str) -> Optional[str]:
     candidates = re.findall(r"(\+?\d[\d\-\s\(\)]{6,}\d)", text)
-    return max([c.strip() for c in candidates], key=len) if candidates else None
+    return (
+        max([c.strip() for c in candidates], key=len) if candidates else None
+    )
 
 
 # ----------------- 日期解析 -----------------
@@ -412,7 +422,9 @@ def parse_date_range(
         return None, None
     date_range = date_range.replace("–", "-").strip()
     parts = [p.strip() for p in date_range.split("-")]
-    start, end = parts[0] if parts else None, parts[1] if len(parts) > 1 else None
+    start, end = parts[0] if parts else None, (
+        parts[1] if len(parts) > 1 else None
+    )
 
     # --- 处理 end 为月份但无年份 ---
     if start and end:
@@ -420,7 +432,9 @@ def parse_date_range(
         end_match = re.search(r"([A-Za-z]+)\s*(\d{4})", end)
 
         if start_match:
-            start_month, start_year = start_match.group(1), int(start_match.group(2))
+            start_month, start_year = start_match.group(1), int(
+                start_match.group(2)
+            )
         else:
             start_month, start_year = None, None
 
@@ -449,7 +463,8 @@ def parse_date_range(
                 if (
                     start_month
                     and end_month
-                    and month_order.index(end_month) < month_order.index(start_month)
+                    and month_order.index(end_month)
+                    < month_order.index(start_month)
                 ):
                     end_year += 1
 
@@ -475,7 +490,13 @@ def is_project_title(text: str) -> bool:
     if not text:
         return False
     low = text.lower()
-    if low in ("project", "projects", "项目", "project experience", "project:"):
+    if low in (
+        "project",
+        "projects",
+        "项目",
+        "project experience",
+        "project:",
+    ):
         return False
     if "|" in text or "@" in text or re.search(r"\b(19|20)\d{2}\b", text):
         return False
@@ -573,7 +594,9 @@ def validate_and_clean(structured: dict) -> dict:
     }
 
     # 教育经历
-    cleaned["education"].extend([e for e in structured.get("education", []) if e])
+    cleaned["education"].extend(
+        [e for e in structured.get("education", []) if e]
+    )
 
     # 工作经历
     cleaned["work_experience"].extend(
@@ -587,7 +610,12 @@ def validate_and_clean(structured: dict) -> dict:
         title = (p.get("title") or "").lower()
         if any(
             x in title
-            for x in ["platforms & tech", "frameworks", "skills", "sourced code"]
+            for x in [
+                "platforms & tech",
+                "frameworks",
+                "skills",
+                "sourced code",
+            ]
         ):
             cleaned["other"].append(p)
         else:
@@ -598,7 +626,8 @@ def validate_and_clean(structured: dict) -> dict:
     for o in structured.get("other", []):
         desc = o if isinstance(o, str) else o.get("description", "")
         if desc and any(
-            k in desc.lower() for k in ["frameworks", "libraries", "tech", "tools"]
+            k in desc.lower()
+            for k in ["frameworks", "libraries", "tech", "tools"]
         ):
             # 把冒号后的部分拆成技能
             parts = desc.split(":")[-1]
@@ -613,7 +642,9 @@ def validate_and_clean(structured: dict) -> dict:
     for o in cleaned["other"]:
         desc = o if isinstance(o, str) else o.get("description", "")
         if "|" in desc and (
-            any(k in desc.lower() for k in COMPANY_KEYWORDS + POSITION_KEYWORDS)
+            any(
+                k in desc.lower() for k in COMPANY_KEYWORDS + POSITION_KEYWORDS
+            )
             and re.search(r"(19|20)\d{2}", desc)
         ):
             moved.append(parse_work_line(desc))
@@ -695,7 +726,9 @@ def fix_work_dates(work_experience: list) -> list:
             rf"{month_pattern}\s+{year_pattern}", desc_clean
         )
         # 提取 description 中只有 Month 的部分
-        months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
+        months_only_matches = re.findall(
+            rf"{month_pattern}(?=\s*(–|$))", desc_clean
+        )
 
         # --- start_date ---
         start_date = job.get("start_date")

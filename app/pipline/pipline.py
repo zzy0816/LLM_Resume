@@ -5,7 +5,9 @@ import random
 import re
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from app.qre.doc_read import read_document_paragraphs
 from app.qre.parser import parse_resume_to_structured
@@ -70,12 +72,16 @@ def restore_parsed_structure(structured_resume, original_resume):
                 )
                 restored.append(
                     {
-                        "company": item.get("company") or orig_item.get("company"),
-                        "position": item.get("title") or orig_item.get("position"),
-                        "location": item.get("location") or orig_item.get("location"),
+                        "company": item.get("company")
+                        or orig_item.get("company"),
+                        "position": item.get("title")
+                        or orig_item.get("position"),
+                        "location": item.get("location")
+                        or orig_item.get("location"),
                         "start_date": item.get("start_date")
                         or orig_item.get("start_date"),
-                        "end_date": item.get("end_date") or orig_item.get("end_date"),
+                        "end_date": item.get("end_date")
+                        or orig_item.get("end_date"),
                         "description": item.get("description")
                         or orig_item.get("description"),
                         "highlights": item.get("highlights")
@@ -122,8 +128,10 @@ def restore_parsed_structure(structured_resume, original_resume):
                 )
                 restored.append(
                     {
-                        "school": item.get("school") or orig_item.get("school"),
-                        "degree": item.get("degree") or orig_item.get("degree"),
+                        "school": item.get("school")
+                        or orig_item.get("school"),
+                        "degree": item.get("degree")
+                        or orig_item.get("degree"),
                         "grad_date": item.get("grad_date")
                         or orig_item.get("grad_date"),
                         "description": item.get("description")
@@ -145,7 +153,9 @@ def clean_skills(raw_skills: list[str]) -> list[str]:
         if not s:
             continue
         s = s.strip()
-        s = re.sub(r"^(Frameworks\s*&\s*Libraries:)", "", s, flags=re.I).strip()
+        s = re.sub(
+            r"^(Frameworks\s*&\s*Libraries:)", "", s, flags=re.I
+        ).strip()
         parts = re.split(r"[,\n]", s)
         parts = [p.strip() for p in parts if p.strip()]
         cleaned.extend(parts)
@@ -183,8 +193,10 @@ def restore_work_experience(structured_resume, parsed_resume, faiss_results):
                 "end_date": faiss_entry.get("end_date")
                 or orig_item.get("end_date")
                 or "Present",
-                "description": item.get("description") or orig_item.get("description"),
-                "highlights": item.get("highlights") or orig_item.get("highlights", []),
+                "description": item.get("description")
+                or orig_item.get("description"),
+                "highlights": item.get("highlights")
+                or orig_item.get("highlights", []),
             }
         )
 
@@ -247,7 +259,9 @@ def main_pipeline(
         # -----------------
         db = load_faiss(safe_name)
         if db is None:
-            logger.info(f"[PIPELINE] FAISS not found, building for {safe_name}")
+            logger.info(
+                f"[PIPELINE] FAISS not found, building for {safe_name}"
+            )
             db = build_faiss(structured_resume)
             if db:
                 save_faiss(safe_name, db)
@@ -256,7 +270,9 @@ def main_pipeline(
         query_results = {}
         if db:
             for q in queries:
-                res = query_dynamic_category(db, structured_resume, q, top_k=10)
+                res = query_dynamic_category(
+                    db, structured_resume, q, top_k=10
+                )
                 filtered = rule_based_filter(q, res.get("results", []))
                 query_results[q] = filtered
 
@@ -266,14 +282,17 @@ def main_pipeline(
         structured_resume = fill_query_exact(
             structured_resume, query_results, parsed_resume
         )
-        structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
+        structured_resume = restore_parsed_structure(
+            structured_resume, parsed_resume
+        )
         structured_resume = restore_work_experience(
             structured_resume, parsed_resume, query_results
         )
         structured_resume = validate_and_clean(structured_resume)
         structured_resume = fix_resume_dates(structured_resume)
         structured_resume["skills"] = clean_skills(
-            query_results.get("技能", []) or structured_resume.get("skills", [])
+            query_results.get("技能", [])
+            or structured_resume.get("skills", [])
         )
         structured_resume["other"] = [
             (
@@ -309,5 +328,9 @@ if __name__ == "__main__":
     all_results = main_pipeline(files_to_process, mode="exact")
 
     for file_name, structured_resume in all_results.items():
-        logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} =====")
-        logger.info(json.dumps(structured_resume, ensure_ascii=False, indent=2))
+        logger.info(
+            f"\n===== FINAL STRUCTURED RESUME JSON for {file_name} ====="
+        )
+        logger.info(
+            json.dumps(structured_resume, ensure_ascii=False, indent=2)
+        )

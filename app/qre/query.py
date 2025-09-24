@@ -5,7 +5,9 @@ import random
 import re
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from app.utils.utils import extract_skills_from_text, normalize_category
 
@@ -41,10 +43,19 @@ def detect_query_category(query: str):
     query_lower = query.lower()
     if any(
         k in query_lower
-        for k in ["work", "experience", "career", "job", "employment", "工作经历"]
+        for k in [
+            "work",
+            "experience",
+            "career",
+            "job",
+            "employment",
+            "工作经历",
+        ]
     ):
         return "work_experience"
-    elif any(k in query_lower for k in ["project", "projects", "项目经历", "项目"]):
+    elif any(
+        k in query_lower for k in ["project", "projects", "项目经历", "项目"]
+    ):
         return "projects"
     elif any(
         k in query_lower
@@ -87,7 +98,9 @@ def query_dynamic_category(
     返回 {"query": query, "results": [...] }
     """
     docs = db.similarity_search(query, k=top_k * 5)
-    logger.debug("[QUERY DEBUG] retrieved %d docs for query='%s'", len(docs), query)
+    logger.debug(
+        "[QUERY DEBUG] retrieved %d docs for query='%s'", len(docs), query
+    )
 
     candidate_paras = []
     target_category = normalize_category(detect_query_category(query))
@@ -146,7 +159,9 @@ def query_dynamic_category(
                 if doc_cat == "skills":
                     candidate_paras.append(doc.page_content)
                 elif doc_cat == "other" and len(doc.page_content) < 150:
-                    if any(k in doc.page_content.lower() for k in skill_keywords):
+                    if any(
+                        k in doc.page_content.lower() for k in skill_keywords
+                    ):
                         candidate_paras.append(doc.page_content)
 
             else:
@@ -184,7 +199,11 @@ def query_all_categories(db, structured_resume, top_k=10):
             # 如果严格过滤没有结果，用非严格模式 fallback
             if not paras:
                 res = query_dynamic_category(
-                    db, structured_resume, q, top_k=top_k, use_category_filter=False
+                    db,
+                    structured_resume,
+                    q,
+                    top_k=top_k,
+                    use_category_filter=False,
                 )
                 paras = res.get("results", [])
             all_results[q] = paras
@@ -227,9 +246,12 @@ def fill_query_exact(
 
     # ----------------- 教育经历 -----------------
     edu_date_pattern = re.compile(
-        r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})", re.I
+        r"(?:(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+)?(\d{4})",
+        re.I,
     )
-    edu_paras = query_results.get("教育经历", []) or structured.get("education", [])
+    edu_paras = query_results.get("教育经历", []) or structured.get(
+        "education", []
+    )
     for i, para in enumerate(edu_paras):
         text = safe_text(para)
         if not text:
@@ -281,7 +303,9 @@ def fill_query_exact(
             entry["start_date"] = (
                 f"{start_month} {start_year}" if start_month else start_year
             )
-            entry["end_date"] = f"{end_month} {end_year}" if end_month else end_year
+            entry["end_date"] = (
+                f"{end_month} {end_year}" if end_month else end_year
+            )
 
         # 回填 parsed_resume 的 highlights / location / title 等
         if parsed_resume and i < len(parsed_resume.get("work_experience", [])):
@@ -293,7 +317,9 @@ def fill_query_exact(
         new_structured["work_experience"].append(entry)
 
     # ----------------- 项目经历 -----------------
-    proj_paras = query_results.get("项目经历", []) or structured.get("projects", [])
+    proj_paras = query_results.get("项目经历", []) or structured.get(
+        "projects", []
+    )
     for para in proj_paras:
         text = safe_text(para)
         if not text:
@@ -303,7 +329,8 @@ def fill_query_exact(
             continue
         # 判断第一行是否是 title
         if re.match(
-            r"^(built|created|used|collected|led|fine\-tuned)", lines[0].lower()
+            r"^(built|created|used|collected|led|fine\-tuned)",
+            lines[0].lower(),
         ):
             title = ""
             content = "\n".join(lines)
@@ -341,7 +368,9 @@ def fill_query_exact(
         new_structured["projects"].append(entry)
 
     # ----------------- 技能 -----------------
-    skills_paras = query_results.get("技能", []) or structured.get("skills", [])
+    skills_paras = query_results.get("技能", []) or structured.get(
+        "skills", []
+    )
     for para in skills_paras:
         text = safe_text(para)
         if not text:

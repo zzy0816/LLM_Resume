@@ -8,7 +8,9 @@ import fitz
 import pdfplumber
 import torch
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from docx import Document as DocxDocument
 from PIL import Image
@@ -88,7 +90,11 @@ def _load_layoutlm():
 def _load_donut():
     global _donut_processor, _donut_model, _USE_DONUT
     if _donut_processor is None or _donut_model is None:
-        if DonutProcessor is None or VisionEncoderDecoderModel is None or Image is None:
+        if (
+            DonutProcessor is None
+            or VisionEncoderDecoderModel is None
+            or Image is None
+        ):
             _USE_DONUT = False
             return None, None, _USE_DONUT
         try:
@@ -112,7 +118,9 @@ def _load_donut():
 def read_docx_paragraphs(docx_path: str):
 
     paragraphs = [
-        p.text.strip() for p in DocxDocument(docx_path).paragraphs if p.text.strip()
+        p.text.strip()
+        for p in DocxDocument(docx_path).paragraphs
+        if p.text.strip()
     ]
 
     donut_processor, donut_model, USE_DONUT = _load_donut()
@@ -128,13 +136,19 @@ def read_docx_paragraphs(docx_path: str):
                     outputs, skip_special_tokens=True
                 )[0]
                 donut_paras = [
-                    line.strip() for line in decoded.split("\n") if line.strip()
+                    line.strip()
+                    for line in decoded.split("\n")
+                    if line.strip()
                 ]
                 if donut_paras:
                     paragraphs = donut_paras
-                    logger.info("DOCX parsed by Donut, paragraphs=%d", len(paragraphs))
+                    logger.info(
+                        "DOCX parsed by Donut, paragraphs=%d", len(paragraphs)
+                    )
         except Exception as e:
-            logger.warning("Donut parsing failed, fallback to docx text. Error: %s", e)
+            logger.warning(
+                "Donut parsing failed, fallback to docx text. Error: %s", e
+            )
 
     logger.info("DOCX split into %d paragraphs", len(paragraphs))
     return paragraphs
@@ -164,14 +178,21 @@ def read_pdf_paragraphs(pdf_path: str):
             doc = fitz.open(pdf_path)
             for page in doc:
                 pix = page.get_pixmap()
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img = Image.frombytes(
+                    "RGB", [pix.width, pix.height], pix.samples
+                )
                 words = page.get_text("words")
                 if not words:
                     continue
                 words_text = [w[4] for w in words]
                 boxes = [
                     normalize_box(
-                        w[0], w[1], w[2], w[3], page.rect.width, page.rect.height
+                        w[0],
+                        w[1],
+                        w[2],
+                        w[3],
+                        page.rect.width,
+                        page.rect.height,
                     )
                     for w in words
                 ]
@@ -194,11 +215,15 @@ def read_pdf_paragraphs(pdf_path: str):
                 ]
                 paragraphs.extend([" ".join(words_out)])
             doc.close()
-            logger.info("PDF parsed by LayoutLMv3, paragraphs=%d", len(paragraphs))
+            logger.info(
+                "PDF parsed by LayoutLMv3, paragraphs=%d", len(paragraphs)
+            )
             if paragraphs:
                 return paragraphs
         except Exception as e:
-            logger.warning("LayoutLMv3 failed, fallback to pdfplumber. Error: %s", e)
+            logger.warning(
+                "LayoutLMv3 failed, fallback to pdfplumber. Error: %s", e
+            )
 
     # fallback pdfplumber
     try:

@@ -4,7 +4,9 @@ import os
 import random
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
@@ -52,7 +54,9 @@ def build_test_faiss(structured_resume):
         if cat == "skills":
             text = "\n".join([str(s).strip() for s in entries if s])
             if text:
-                docs.append(LC_Document(page_content=text, metadata={"category": cat}))
+                docs.append(
+                    LC_Document(page_content=text, metadata={"category": cat})
+                )
             continue
         for e in entries:
             if isinstance(e, dict):
@@ -65,7 +69,9 @@ def build_test_faiss(structured_resume):
                     text = e.get("description", "") or ""
                 if text:
                     docs.append(
-                        LC_Document(page_content=text, metadata={"category": cat})
+                        LC_Document(
+                            page_content=text, metadata={"category": cat}
+                        )
                     )
     if not docs:
         logger.warning("No docs to build FAISS.")
@@ -115,7 +121,9 @@ def test_faiss(parsed_json_file: str):
     structured_resume = fill_query_exact(
         structured_resume, query_results, parsed_resume
     )
-    structured_resume = restore_parsed_structure(structured_resume, parsed_resume)
+    structured_resume = restore_parsed_structure(
+        structured_resume, parsed_resume
+    )
     structured_resume = validate_and_clean(structured_resume)
 
     # 5️⃣ 输出结果
@@ -136,9 +144,10 @@ def test_faiss(parsed_json_file: str):
 if __name__ == "__main__":
 
     print("CWD:", os.getcwd())
-    print("Exists:", os.path.exists(r"data\classified\Resume_AI_.pdf_parsed.json"))
-
-    test_file = (
-        r"data\classified\Resume_AI_.pdf_parsed.json"  # 使用已保存的 parsed.json 文件
+    print(
+        "Exists:",
+        os.path.exists(r"data\classified\Resume_AI_.pdf_parsed.json"),
     )
+
+    test_file = r"data\classified\Resume_AI_.pdf_parsed.json"  # 使用已保存的 parsed.json 文件
     test_faiss(test_file)

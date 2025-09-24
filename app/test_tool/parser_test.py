@@ -5,20 +5,16 @@ import random
 import re
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from typing import List
 
 from app.qre.ner import run_ner_batch
-from app.utils.utils import (
-    extract_email,
-    extract_phone,
-    is_project_title,
-    is_work_line,
-    parse_education_line,
-    parse_work_line,
-    preprocess_paragraphs,
-)
+from app.utils.utils import (extract_email, extract_phone, is_project_title,
+                             is_work_line, parse_education_line,
+                             parse_work_line, preprocess_paragraphs)
 
 
 class JsonFormatter(logging.Formatter):
@@ -44,7 +40,9 @@ logger = logging.getLogger()  # root logger
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-ACTION_RE = re.compile(r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I)
+ACTION_RE = re.compile(
+    r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I
+)
 POSITION_KEYWORDS = [
     "intern",
     "engineer",
@@ -127,7 +125,9 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
         # -------------------- 教育行 --------------------
         if any(k in low for k in ["university", "college", "school"]) or (
             "|" in text
-            and any(word in low for word in ["master", "bachelor", "phd", "degree"])
+            and any(
+                word in low for word in ["master", "bachelor", "phd", "degree"]
+            )
         ):
             edu_entry = parse_education_line(text)
             structured["education"].append(edu_entry)
@@ -150,7 +150,10 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
         if any(k in low for k in ["education", "education:", "学校"]):
             current_section = "education"
             continue
-        if any(k in low for k in ["project", "projects", "项目", "project experience"]):
+        if any(
+            k in low
+            for k in ["project", "projects", "项目", "project experience"]
+        ):
             current_section = "projects"
             continue
         if any(
@@ -166,7 +169,9 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
             current_section = "skills"
             if ":" in text:
                 right = text.split(":", 1)[1]
-                skills = [s.strip() for s in re.split(r",|;", right) if s.strip()]
+                skills = [
+                    s.strip() for s in re.split(r",|;", right) if s.strip()
+                ]
                 structured["skills"].extend(skills)
             continue
 
@@ -190,7 +195,10 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
         # -------------------- 动作句 --------------------
         if ACTION_RE.search(text):
             # 忽略纯年份或 "Present" 等
-            if re.match(r"^(19|20)\d{2}$", text) or text.strip().lower() == "present":
+            if (
+                re.match(r"^(19|20)\d{2}$", text)
+                or text.strip().lower() == "present"
+            ):
                 continue
             # 当前在 work_experience
             if current_section == "work_experience" and last_work:
@@ -206,7 +214,8 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
                 if is_work_line(prev):
                     if not (
                         structured["work_experience"]
-                        and structured["work_experience"][-1]["description"] == prev
+                        and structured["work_experience"][-1]["description"]
+                        == prev
                     ):
                         work_entry = parse_work_line(prev)
                         structured["work_experience"].append(work_entry)
@@ -239,14 +248,17 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
             or "languages" in low
         ):
             right = text.split(":", 1)[-1] if ":" in text else text
-            skills = [s.strip() for s in re.split(r",|;|\n", right) if s.strip()]
+            skills = [
+                s.strip() for s in re.split(r",|;|\n", right) if s.strip()
+            ]
             structured["skills"].extend(skills)
             current_section = "skills"
             continue
 
         # -------------------- 工作结束日期修正 --------------------
         date_match = re.match(
-            r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s*[-–]$", text
+            r"^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\s*[-–]$",
+            text,
         )
         if date_match and last_work and idx + 1 < len(paragraphs):
             last_work["end_date"] = paragraphs[idx + 1].strip()
@@ -294,9 +306,9 @@ def parse_resume_to_structured(paragraphs: List[str]) -> dict:
                     if not last.get("company"):
                         last["company"] = text
             elif label in ["EDUCATION", "SCHOOL"]:
-                if not structured["education"] or not structured["education"][-1].get(
-                    "school"
-                ):
+                if not structured["education"] or not structured["education"][
+                    -1
+                ].get("school"):
                     structured["education"].append({"school": text})
 
     # -------------------- 3. 去重 & 默认值 --------------------

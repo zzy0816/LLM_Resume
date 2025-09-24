@@ -5,7 +5,9 @@ import pprint
 import random
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
@@ -49,7 +51,13 @@ def build_faiss(structured_resume: dict, embeddings_model=None):
     user_email = structured_resume.get("email", "unknown")
     logger.info(f"[FAISS DEBUG] Starting build_faiss for resume: {user_email}")
 
-    categories = ["work_experience", "projects", "education", "skills", "other"]
+    categories = [
+        "work_experience",
+        "projects",
+        "education",
+        "skills",
+        "other",
+    ]
 
     for cat in categories:
         entries = structured_resume.get(cat, [])

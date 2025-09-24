@@ -5,13 +5,19 @@ import random
 import re
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 
 from app.qre.doc_read import read_document_paragraphs
 from app.storage.db import save_resume
 from app.test_tool.parser_test import parse_resume_to_structured
 from app.utils.files import save_json
-from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
+from app.utils.utils import (
+    auto_fill_fields,
+    extract_basic_info,
+    validate_and_clean,
+)
 
 
 class JsonFormatter(logging.Formatter):
@@ -94,7 +100,8 @@ def fix_resume_dates(structured_resume: dict) -> dict:
     """
     修复教育和工作经历日期：
     1. 教育经历：优先使用 description 中 Month Year，否则用年份。
-    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_date >= start_date。
+    2. 工作经历：优先使用 description 中 Month Year，end_date 会根据 highlights 推断，保证 end_dat
+e >= start_date。
     3. highlights 中纯年份或 "Present" 会被清理。
     """
     if not structured_resume:
@@ -157,7 +164,9 @@ def fix_work_dates(work_experience: list) -> list:
             rf"{month_pattern}\s+{year_pattern}", desc_clean
         )
         # 提取 description 中只有 Month 的部分
-        months_only_matches = re.findall(rf"{month_pattern}(?=\s*(–|$))", desc_clean)
+        months_only_matches = re.findall(
+            rf"{month_pattern}(?=\s*(–|$))", desc_clean
+        )
 
         # --- start_date ---
         start_date = job.get("start_date")
@@ -165,7 +174,8 @@ def fix_work_dates(work_experience: list) -> list:
             start_date = (
                 month_year_matches[0]
                 if month_year_matches
-                else f"{months_only_matches[0] if months_only_matches else 'Jan'} 2020"
+                else f"{months_only_matches[0] if months_only_matches else
+'Jan'} 2020"
             )
 
         # --- end_date ---
@@ -225,30 +235,38 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
         # 打印 parsed_resume（可能已经序列化友好），若过大可注释
         logger.info("Parsed resume:")
         try:
-            logger.info(json.dumps(parsed_resume, ensure_ascii=False, indent=2))
+            logger.info(
+                json.dumps(parsed_resume, ensure_ascii=False, indent=2)
+            )
         except Exception:
             logger.info(
                 json.dumps(
-                    make_safe_for_mongo(parsed_resume), ensure_ascii=False, indent=2
+                    make_safe_for_mongo(parsed_resume),
+                    ensure_ascii=False,
+                    indent=2,
                 )
             )
 
         # 2️⃣ 自动填充和合并基本信息
         structured_resume = auto_fill_fields(parsed_resume) or {}
-        structured_resume["name"] = structured_resume.get("name") or basic_info.get(
+        structured_resume["name"] = structured_resume.get(
             "name"
-        )
-        structured_resume["email"] = structured_resume.get("email") or basic_info.get(
+        ) or basic_info.get("name")
+        structured_resume["email"] = structured_resume.get(
             "email"
-        )
-        structured_resume["phone"] = structured_resume.get("phone") or basic_info.get(
+        ) or basic_info.get("email")
+        structured_resume["phone"] = structured_resume.get(
             "phone"
-        )
+        ) or basic_info.get("phone")
 
         # 3️⃣ 清理和验证
-        logger.info(f"Other after auto_fill_fields: {structured_resume.get('other')}")
+        logger.info(
+            f"Other after auto_fill_fields: {structured_resume.get('other')}"
+        )
         structured_resume = validate_and_clean(structured_resume) or {}
-        logger.info(f"Other after validate_and_clean: {structured_resume.get('other')}")
+        logger.info(
+            f"Other after validate_and_clean: {structured_resume.get('other')}"
+        )
 
         structured_resume = fix_resume_dates(structured_resume)
 
@@ -277,7 +295,9 @@ def main_pipeline(files_to_process: list[str]) -> dict[str, dict]:
             try:
                 fallback_path = f"./data/{safe_name}_parsed_fallback.json"
                 with open(fallback_path, "w", encoding="utf-8") as f:
-                    json.dump(safe_resume_for_db, f, ensure_ascii=False, indent=2)
+                    json.dump(
+                        safe_resume_for_db, f, ensure_ascii=False, indent=2
+                    )
                 logger.info(f"Saved fallback JSON to {fallback_path}")
             except Exception as e2:
                 logger.error(f"Fallback JSON save also failed: {e2}")
@@ -292,6 +312,10 @@ if __name__ == "__main__":
     files_to_process = ["Resume(AI).pdf"]
     all_results = main_pipeline(files_to_process)
     for user_email, safe_structured_resume in all_results.items():
-        logger.info(f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} =====")
+        logger.info(
+            f"\n===== FINAL STRUCTURED RESUME JSON for {user_email} ====="
+        )
         # 这里直接打印已经安全化的结果，避免循环引用
-        logger.info(json.dumps(safe_structured_resume, ensure_ascii=False, indent=2))
+        logger.info(
+            json.dumps(safe_structured_resume, ensure_ascii=False, indent=2)
+        )
