@@ -20,16 +20,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 3️⃣ Install dependencies
+      # 3️⃣ Install dependencies with cache
       - name: Install dependencies
-        run: |
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install mongomock
 
       # 4️⃣ Auto-format imports & code
-      - name: Format code with isort & black
+      - name: Format code
         run: |
-          isort .
+          isort . --profile black
           black . --line-length 120
 
       # 5️⃣ Lint code
@@ -40,20 +47,26 @@ jobs:
             --ignore=E501,E402,E741,E128,E999 \
             --exit-zero
 
-      # 🔍 Debug: check repo structure
+      # 6️⃣ Debug: check repo structure
       - name: List project structure
         run: ls -R
 
-      # 6️⃣ Run tests and save HTML report
-      - name: Run tests
+      # 7️⃣ Run tests with MongoDB mocked
+      - name: Run tests (with mongomock)
         run: |
           if [ -f "app/test_tool/pipline_test.py" ]; then
-            echo "✅ Found pipline_test.py, running pytest..."
-            pytest app/test_tool/pipline_test.py --maxfail=1 --disable-warnings --html=report.html
+            echo "✅ Found pipline_test.py, running pytest with mongomock..."
+            pytest app/test_tool/pipline_test.py \
+              --maxfail=1 \
+              --disable-warnings \
+              --html=report.html \
+              --tb=short \
+              -q
           else
             echo "⚠️ pipline_test.py not found, skipping tests"
           fi
 
+      # 8️⃣ Upload pytest HTML report
       - name: Upload test report
         uses: actions/upload-artifact@v4
         with:
@@ -69,14 +82,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Verify docker-compose.yml
+      # 2️⃣ Validate docker-compose.yml
       - name: Validate docker-compose.yml
         run: docker compose config
 
-      # 3️⃣ Build all services and save logs
-      - name: Build services with docker-compose
+      # 3️⃣ Build all services with logs
+      - name: Build services
         run: |
           docker compose build 2>&1 | tee docker_build.log
+
+      # 4️⃣ Upload docker build logs
       - name: Upload docker build logs
         uses: actions/upload-artifact@v4
         with:

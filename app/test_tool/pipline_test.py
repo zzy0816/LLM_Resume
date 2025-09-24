@@ -348,7 +348,8 @@ def test_main_pipeline_runs():
          patch("app.test_tool.pipline_test.restore_work_experience", side_effect=lambda x, y, z: x), \
          patch("app.test_tool.pipline_test.validate_and_clean", side_effect=lambda x: x), \
          patch("app.test_tool.pipline_test.fix_resume_dates", side_effect=lambda x: x), \
-         patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x):
+         patch("app.test_tool.pipline_test.clean_skills", side_effect=lambda x: x), \
+         patch("pymongo.MongoClient"):
 
         mock_save.return_value = None
         mock_save_faiss.return_value = None

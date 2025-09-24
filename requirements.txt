@@ -20,3 +20,4 @@ pytest
 pytest-html
 PyMuPDF
 pdfplumber
+mongomock
