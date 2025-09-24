@@ -25,7 +25,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest flake8 black isort
+          pip install pytest flake8 black isort pytest-html  # 注意加了 pytest-html
 
       # 4️⃣ Optional: Auto-format imports & code
       - name: Format code with isort & black
@@ -41,7 +41,7 @@ jobs:
             --ignore=E501,E402,E741,E128,E999 \
             --exit-zero
 
-      # 6️⃣ Run tests and save report
+      # 6️⃣ Run tests and save HTML report
       - name: Run tests
         run: pytest test_tool/ --maxfail=1 --disable-warnings --html=report.html
       - name: Upload test report
