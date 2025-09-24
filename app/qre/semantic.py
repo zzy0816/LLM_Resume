@@ -1,12 +1,14 @@
-import sys, os
+import sys
+import os
+import logging
+import json
+import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import logging
 from sentence_transformers import SentenceTransformer
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

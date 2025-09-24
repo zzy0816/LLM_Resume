@@ -2,11 +2,12 @@ import boto3
 import os
 import logging
 import time
+import json
+import random
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError, EndpointConnectionError
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

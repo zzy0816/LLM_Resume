@@ -1,15 +1,16 @@
-import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
+import sys
+import os
 import logging
 import json
+import random
 import re
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from app.utils.files import save_json
 from app.qre.doc_read import read_document_paragraphs
 from app.test_tool.parser_test import parse_resume_to_structured 
 from app.utils.utils import auto_fill_fields, extract_basic_info, validate_and_clean
 from app.storage.db import save_resume
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

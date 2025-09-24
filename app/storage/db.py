@@ -1,6 +1,9 @@
+import os
+import logging
+import json
+import random
+import datetime
 from pymongo import MongoClient
-import logging, datetime
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

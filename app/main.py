@@ -1,4 +1,8 @@
-import sys, os
+import sys
+import os
+import logging
+import json
+import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from typing import Union, List
@@ -9,7 +13,6 @@ from app.storage.db import load_resume
 from app.qre.query import query_dynamic_category
 from app.pipline.pipline import main_pipeline
 from app.storage.storage_client import StorageClient
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

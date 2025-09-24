@@ -1,6 +1,8 @@
+import os
 import logging
+import json
+import random
 from transformers import AutoTokenizer, AutoModelForTokenClassification, pipeline
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

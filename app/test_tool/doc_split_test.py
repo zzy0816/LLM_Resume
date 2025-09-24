@@ -1,12 +1,15 @@
 import re
 import textwrap
+import os
+import logging
+import json
+import random
+import re
 from difflib import SequenceMatcher
 try:
     from PIL import Image, ImageDraw, ImageFont
 except Exception:
     Image = ImageDraw = ImageFont = None
-
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

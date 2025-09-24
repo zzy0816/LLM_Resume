@@ -1,15 +1,16 @@
-import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
+import sys
+import os
 import logging
 import json
+import random
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from app.test_tool.query_test import query_dynamic_category, fill_query_exact
 from app.utils.utils import rule_based_filter, validate_and_clean
 from app.test_tool.pipline_test import restore_parsed_structure
 from langchain.schema import Document as LC_Document
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

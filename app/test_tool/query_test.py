@@ -1,10 +1,12 @@
-import sys, os
+import sys
+import os
+import logging
+import json
+import random
+import re
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import logging
-import re
-from app.utils.utils import normalize_category, normalize_skills, extract_skills_from_text
-import logging, json, random, time, os
+from app.utils.utils import normalize_category, extract_skills_from_text
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

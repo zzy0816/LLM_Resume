@@ -1,11 +1,13 @@
-import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-
+import sys
+import os
+import logging
+import json
+import random
 import requests
 import streamlit as st
-from app.storage.storage_client import StorageClient
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import logging, json, random, time, os
+from app.storage.storage_client import StorageClient
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

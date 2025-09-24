@@ -1,11 +1,13 @@
-import sys, os
+import sys
+import os
+import logging
+import json
+import random
+import torch
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import logging
 from sentence_transformers import SentenceTransformer, util
-import torch
 from app.utils.files import load_embeddings, save_embeddings
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

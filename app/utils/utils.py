@@ -1,7 +1,9 @@
-import re
+import os
 import logging
+import json
+import random
+import re
 from typing import List, Optional, Tuple
-import logging, json, random, time, os
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

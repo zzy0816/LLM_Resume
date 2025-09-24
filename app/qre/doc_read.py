@@ -1,16 +1,20 @@
-import sys, os
+import sys
+import os
+import logging
+import fitz
+import pdfplumber
+import torch
+import json
+import random
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import logging
-import pdfplumber
 from docx import Document as DocxDocument
-import fitz
+
 from PIL import Image
-import torch
 from transformers import LayoutLMv3Processor, LayoutLMv3ForTokenClassification
 from transformers import DonutProcessor, VisionEncoderDecoderModel
 from app.qre.doc_split import render_paragraphs_to_image  # 避免循环引用
-import logging, json, random, time, os
+
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):

@@ -1,11 +1,12 @@
-import sys, os
+import sys
+import os
+import logging
+import json
+import random
+import re
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-import re
-import json
-import logging
 from typing import List
-
 from app.utils.utils import (
     preprocess_paragraphs,
     extract_email,
@@ -15,8 +16,7 @@ from app.utils.utils import (
     parse_work_line,
     is_project_title,
 )
-from app.qre.ner import run_ner_batch 
-import logging, json, random, time, os
+from app.qre.ner import run_ner_batch
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
