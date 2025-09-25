@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import random
 import re
 import sys
 
@@ -13,7 +11,6 @@ from app.utils.utils import extract_skills_from_text, normalize_category, setup_
 
 setup_logging()
 logger = logging.getLogger(__name__)
-
 
 # -------------------------
 # 查询接口

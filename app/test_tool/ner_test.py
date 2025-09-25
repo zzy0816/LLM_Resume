@@ -1,7 +1,6 @@
-import json
+import sys
 import logging
 import os
-import random
 
 from transformers import (
     AutoModelForTokenClassification,
@@ -9,7 +8,9 @@ from transformers import (
     pipeline,
 )
 
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.utils.utils import setup_logging
 
 setup_logging()

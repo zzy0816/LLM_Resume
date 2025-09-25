@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import random
 import sys
 
 import fitz
@@ -20,7 +18,9 @@ from transformers import (
     LayoutLMv3Processor,
     VisionEncoderDecoderModel,
 )
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.qre.doc_split import render_paragraphs_to_image 
 from app.utils.utils import setup_logging
 

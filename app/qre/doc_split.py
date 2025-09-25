@@ -1,7 +1,6 @@
-import json
 import logging
 import os
-import random
+import sys
 import re
 import textwrap
 from difflib import SequenceMatcher
@@ -11,7 +10,9 @@ try:
 except Exception:
     Image = ImageDraw = ImageFont = None
 
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.utils.utils import setup_logging
 
 setup_logging()

@@ -1,11 +1,12 @@
 import datetime
-import json
 import logging
 import os
-import random
+import sys
 
 from pymongo import MongoClient
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.utils.utils import setup_logging
 
 setup_logging()

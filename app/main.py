@@ -1,7 +1,5 @@
-import json
 import logging
 import os
-import random
 import sys
 
 import uvicorn
@@ -18,6 +16,7 @@ from app.qre.query import query_dynamic_category
 from app.storage.db import load_resume
 from app.storage.storage_client import StorageClient
 from app.utils.files import load_faiss, setup_logging
+
 
 setup_logging()
 logger = logging.getLogger(__name__)

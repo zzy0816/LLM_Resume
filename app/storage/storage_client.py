@@ -1,7 +1,6 @@
-import json
+import sys
 import logging
 import os
-import random
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -9,7 +8,9 @@ import boto3
 from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError, EndpointConnectionError
 from dotenv import load_dotenv
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.utils.utils import setup_logging
 
 setup_logging()

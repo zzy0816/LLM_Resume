@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import random
 import re
 import sys
 
@@ -10,7 +9,9 @@ sys.path.append(
 )
 
 from typing import List
-
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+)
 from app.qre.ner import run_ner_batch
 from app.utils.utils import (
     extract_email,
