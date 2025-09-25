@@ -14,31 +14,10 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from app.test_tool.pipline_test import restore_parsed_structure
 from app.test_tool.query_test import fill_query_exact, query_dynamic_category
-from app.utils.utils import rule_based_filter, validate_and_clean
+from app.utils.utils import rule_based_filter, validate_and_clean, setup_logging
 
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
-            "service": "ner_service",
-            "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999)),
-        }
-        return json.dumps(log)
-
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-logger = logging.getLogger()  # root logger
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 # ------------------------

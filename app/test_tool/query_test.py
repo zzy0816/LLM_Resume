@@ -9,31 +9,12 @@ sys.path.append(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 )
 
-from app.utils.utils import extract_skills_from_text, normalize_category
+from app.utils.utils import extract_skills_from_text, normalize_category, setup_logging
 
 
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
-            "service": "ner_service",
-            "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999)),
-        }
-        return json.dumps(log)
+setup_logging()
+logger = logging.getLogger(__name__)
 
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-logger = logging.getLogger()  # root logger
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
 
 
 # -------------------------

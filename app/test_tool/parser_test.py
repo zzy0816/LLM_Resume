@@ -14,31 +14,11 @@ from typing import List
 from app.qre.ner import run_ner_batch
 from app.utils.utils import (extract_email, extract_phone, is_project_title,
                              is_work_line, parse_education_line,
-                             parse_work_line, preprocess_paragraphs)
+                             parse_work_line, preprocess_paragraphs,
+                             setup_logging)
 
-
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
-            "service": "ner_service",
-            "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999)),
-        }
-        return json.dumps(log)
-
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-logger = logging.getLogger()  # root logger
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 ACTION_RE = re.compile(
     r"\b(Built|Created|Developed|Led|Designed|Implemented)\b", re.I

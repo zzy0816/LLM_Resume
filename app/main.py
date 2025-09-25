@@ -17,38 +17,11 @@ from app.pipline.pipline import main_pipeline
 from app.qre.query import query_dynamic_category
 from app.storage.db import load_resume
 from app.storage.storage_client import StorageClient
-from app.utils.files import load_faiss
+from app.utils.files import load_faiss, setup_logging
 
+setup_logging()
+logger = logging.getLogger(__name__)
 
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
-            "service": "ner_service",
-            "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999)),
-        }
-        return json.dumps(log)
-
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-# 绑定到 root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.addHandler(handler)
-
-# 绑定到 uvicorn logger
-for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    logger.addHandler(handler)
 
 app = FastAPI(title="Resume Analysis API")
 

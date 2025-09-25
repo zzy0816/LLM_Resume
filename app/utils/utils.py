@@ -4,8 +4,9 @@ import logging
 import os
 import random
 import re
+import sys
 from typing import List, Optional, Tuple
-
+from typing import Iterable
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -778,52 +779,69 @@ def fix_work_dates(work_experience: list) -> list:
 
     return work_experience
 
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname,
+            "service": "ner_service",
+            "message": record.getMessage(),
+            "request_id": str(random.randint(1000, 9999)),
+        }
+        return json.dumps(log, ensure_ascii=False)
+    
+def setup_logging(
+    log_file: str = "logs/app.log",
+    console_level: int = logging.INFO,
+    file_level: int = logging.INFO,
+    root_level: int = logging.INFO,
+    noisy_libs: Iterable[str] | None = ("transformers", "tqdm"),
+    clear_existing_handlers: bool = True,
+) -> None:
+    """
+    统一初始化 logging：
+      - 清理已有 handler（避免重复打印）
+      - 文件日志为 JSON（便于 ELK 等处理）
+      - 控制台日志为人类可读格式（便于调试）
+      - 可选降噪指定第三方库的日志级别
 
-# -----------------------
-# 测试 auto_fill_fields
-# -----------------------
-if __name__ == "__main__":
-    test_resume = {
-        "name": "Zhenyu Zhang",
-        "email": "Zhang.zhenyu6@northeastern.edu",
-        "phone": "+1860234-7101",
-        "education": [
-            {
-                "school": "Northeastern University",
-                "degree": "Master of Science in Computer Science",
-                "grad_date": "2025",
-                "description": "Northeastern University | Master of Science in Computer Science | 2025",
-            }
-        ],
-        "work_experience": [
-            {
-                "title": "Data Science Intern",
-                "company": "Google LLC",
-                "start_date": "Jun 2024",
-                "end_date": "Aug 2024",
-                "description": "Data Science Intern | Google LLC | Jun 2024 – Aug 2024",
-                "Professional Experience": None,
-                "Industry Experience": None,
-                "Experience": None,
-            }
-        ],
-        "projects": [
-            {
-                "project_title": "YouTube Recommendation System Built a",
-                "start_date": None,
-                "end_date": None,
-                "project_content": "YouTube Recommendation System Built a recommendation model using DNN and LightGBM...",
-                "Projects": None,
-                "Project Experience": None,
-            }
-        ],
-        "skills": ["Python", "SQL", "TensorFlow", "PyTorch"],
-        "other": [
-            {
-                "description": "Zhenyu Zhang | Email: Zhang.zhenyu6@northeastern.edu | Phone: +1860234-7101"
-            }
-        ],
-    }
+    使用：
+        setup_logging()
+        logger = logging.getLogger(__name__)
+        logger.info("start")
+    注意：请在其它可能配置 logging 的模块导入之前调用此函数（例如 transformers）。
+    """
+    os.makedirs(os.path.dirname(log_file) or ".", exist_ok=True)
 
-    filled_resume = auto_fill_fields(test_resume)
-    print("\nFinal structured resume:\n", filled_resume)
+    logger = logging.getLogger()
+    # 设置 root level（决定 handler 是否接收消息）
+    logger.setLevel(root_level)
+
+    # 清理已有 handler（关键，避免重复输出）
+    if clear_existing_handlers and logger.hasHandlers():
+        for h in list(logger.handlers):
+            logger.removeHandler(h)
+
+    # 文件 handler -> JSON
+    file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
+    file_handler.setLevel(file_level)
+    file_handler.setFormatter(JsonFormatter())
+    logger.addHandler(file_handler)
+
+    # 控制台 handler -> 可读格式
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(console_level)
+    console_fmt = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler.setFormatter(console_fmt)
+    logger.addHandler(console_handler)
+
+    # 可选：降低某些 noisy 第三方库的日志级别
+    if noisy_libs:
+        for lib in noisy_libs:
+            try:
+                logging.getLogger(lib).setLevel(logging.WARNING)
+            except Exception:
+                pass

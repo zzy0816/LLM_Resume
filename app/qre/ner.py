@@ -10,28 +10,10 @@ from transformers import (
 )
 
 
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname,
-            "service": "ner_service",
-            "message": record.getMessage(),
-            "request_id": str(random.randint(1000, 9999)),
-        }
-        return json.dumps(log)
+from app.utils.utils import setup_logging
 
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-logger = logging.getLogger()  # root logger
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 # -------------------------
 # Singleton / Lazy load NER

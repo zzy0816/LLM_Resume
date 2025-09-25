@@ -21,11 +21,14 @@ from app.utils.utils import (
     fix_resume_dates,
     rule_based_filter,
     validate_and_clean,
+    setup_logging
 )
 
+setup_logging()
+logger = logging.getLogger(__name__)
 
 class JsonFormatter(logging.Formatter):
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         log = {
             "timestamp": self.formatTime(record),
             "level": record.levelname,
@@ -33,20 +36,7 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
             "request_id": str(random.randint(1000, 9999)),
         }
-        return json.dumps(log)
-
-
-# 确保 logs 目录存在
-os.makedirs("logs", exist_ok=True)
-
-# 设置日志 handler
-handler = logging.FileHandler("logs/app.log")
-handler.setFormatter(JsonFormatter())
-
-logger = logging.getLogger()  # root logger
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
+        return json.dumps(log, ensure_ascii=False)
 
 # ------------------------
 # 文件名 sanitize
