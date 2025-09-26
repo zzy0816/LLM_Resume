@@ -52,6 +52,8 @@ def save_faiss(file_name: str, db: FAISS):
     logger.info("Saved FAISS db to %s", save_path)
 
 
+FAISS_DIR = "./data/faiss"
+
 def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
     save_path = os.path.join(FAISS_DIR, file_name)
     if os.path.exists(save_path):
@@ -63,7 +65,6 @@ def load_faiss(file_name: str, embeddings_model=None) -> FAISS | None:
             save_path, embeddings_model, allow_dangerous_deserialization=True
         )
     return None
-
 
 # -------------------------
 # embed 保存 & 加载

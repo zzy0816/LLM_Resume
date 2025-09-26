@@ -845,3 +845,14 @@ def setup_logging(
                 logging.getLogger(lib).setLevel(logging.WARNING)
             except Exception:
                 pass
+
+def normalize_pipeline_filename(file_name: str) -> str:
+    # 去掉原扩展名
+    base = os.path.splitext(file_name)[0]
+    safe = base.replace("(", "_").replace(")", "_").replace(" ", "_")
+    # pipeline 会统一存为 pdf.json
+    return f"{safe}_.pdf"
+
+
+def sanitize_filename(file_name: str) -> str:
+    return file_name.replace("(", "_").replace(")", "_").replace(" ", "_")

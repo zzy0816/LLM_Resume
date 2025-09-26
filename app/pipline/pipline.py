@@ -21,7 +21,8 @@ from app.utils.utils import (
     fix_resume_dates,
     rule_based_filter,
     validate_and_clean,
-    setup_logging
+    setup_logging,
+    normalize_pipeline_filename
 )
 
 setup_logging()
@@ -296,12 +297,13 @@ def main_pipeline(
         # -----------------
         # 保存结果
         # -----------------
+        safe_name = normalize_pipeline_filename(file_name)
         save_resume(
             user_id=user_email,
-            file_name=safe_name + "_faiss_confirmed",
+            file_name=safe_name,
             data=structured_resume,
         )
-        save_json(safe_name + "_faiss_confirmed", structured_resume)
+        save_json(safe_name, structured_resume)
         logger.info(f"[PIPELINE] Saved resume for {user_email}")
 
         safe_name = sanitize_filename(file_name)
