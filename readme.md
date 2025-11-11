@@ -46,6 +46,7 @@
 ---
 
 ## 项目目录结构
+    
 LLM_Resume_Project/
 ├── readme.md
 ├── .env
@@ -97,7 +98,7 @@ LLM_Resume_Project/
     └── utils/              # 储存从MINIO下载到本地的文件
         ├── utils.py            # 各种不涉及其他模块的辅助工具
         └── utils_parser.py     # 因为semantic_fallback涉及其他模块,放utils会造成循环调用,故隔离开                  
-
+    
 ---
 
 ## 环境要求
