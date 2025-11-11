@@ -55,33 +55,33 @@ LLM_Resume_Project/
 ├── .github/                # GITHUB ACTION 的 CI/CD 运行脚本 
 ├── logs/                   # 日志
 ├── elk/                    # elastic,logstash, Kibana, 
-    ├── filebeat.yml 设置filebeat 可以Kibana查看日志
-    ├── logstash.conf 设置logstash 可以Kibana查看日志
-    └── init.ps1 启动elk 可以自动记录日志
+│   ├── filebeat.yml 设置filebeat 可以Kibana查看日志
+│   ├── logstash.conf 设置logstash 可以Kibana查看日志
+│   └── init.ps1 启动elk 可以自动记录日志
 ├── auto_format.py/         # 代码风格正式化
 ├── fronted.py/             # streanlit 前端代码
 ├── docker-compose.yml/     # docker下载启动MINIO(S3数据储存), ELK(elastksearch,filebeat,logstash,kibana)
 ├── data/                   # 本地测试简历文件存放目录
-    ├── classified 各个文件的json缓存
-    ├── faiss 各个文件的faiss缓存
-    ├── Resume(AI).docx
-    ├── Resume(AI).pdf
-    └── Resume(DS)v0.1.docx
+│   ├── classified 各个文件的json缓存
+│   ├── faiss 各个文件的faiss缓存
+│   ├── Resume(AI).docx
+│   ├── Resume(AI).pdf
+│   └── Resume(DS)v0.1.docx
 ├── downloads/              # 储存从MINIO下载到本地的文件
-    ├── Resume(AI).docx
-    └── Resume(DS)v0.1.docx
+│   ├── Resume(AI).docx
+│   └── Resume(DS)v0.1.docx
 └── app/
-    ├── main.py             # 使用fastAPI后台脚本
-    ├── pipline/              
-        └── pipline.py          # 总流程 
-    ├── qre/                    # 解析合集
-        ├── doc_read.py         # 读取 doc/pdf 文件
-        ├── doc_split.py        # faiss分段, 去重/归一化
-        ├── ner.py              # 加载ner模型
-        ├── parser.py           # 分类和结构化
-        ├── query.py            # 查询分类段落和覆盖结构化json
-        └── semantic.py         # build_faiss 生成faiss的
-    ├── storage/              
+│   ├── main.py             # 使用fastAPI后台脚本
+│   ├── pipline/              
+│       └── pipline.py          # 总流程 
+│   ├── qre/                    # 解析合集
+│       ├── doc_read.py         # 读取 doc/pdf 文件
+│       ├── doc_split.py        # faiss分段, 去重/归一化
+│       ├── ner.py              # 加载ner模型
+│       ├── parser.py           # 分类和结构化
+│       ├── query.py            # 查询分类段落和覆盖结构化json
+│       └── semantic.py         # build_faiss 生成faiss的
+│   ├── storage/              
         ├── db.py               # mongodb上传
         └── storage_client.py   # 上传和下载简历（可用 boto3）
     ├── test_tool/              # 各个函数的单独测试
